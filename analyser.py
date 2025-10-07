@@ -119,7 +119,7 @@ def main(file_path):
 
 ### FILE INPUT ###
 def select_event_folder(choice_1):
-    event_folders = os.listdir('../events/')
+    event_folders = os.listdir('events/')
     # print('Select an event folder:')
     # for i, folder in enumerate(event_folders):
     #     print(f'{i+1}. {folder}')
@@ -129,7 +129,7 @@ def select_event_folder(choice_1):
     if choice < 0 or choice >= len(event_folders):
         print('Invalid choice.')
         return None
-    return os.path.join('../events/', event_folders[choice])
+    return os.path.join('events/', event_folders[choice])
 
 def select_race_folder(event_folder, choice_2):
     race_folders = os.listdir(event_folder)
