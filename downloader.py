@@ -61,8 +61,6 @@ class GetHTMLFile:
         
         return requests
 
-
-
 class HTMLParser:
     def __init__(self, HTML_FILE_CONTENT):
         self.HTML_FILE_CONTENT = HTML_FILE_CONTENT
@@ -211,6 +209,26 @@ class BoatsDictExtractor:
             boat_name = boat.find("div", class_="descrizione").text.strip()
             boats_dict[tracker_id] = boat_name
         return boats_dict
+class RacePathListExtractor:
+    def __init__(self, driver):
+        self.driver = driver
+    def get_race_path_list(self, race_id, url):
+        if race_id not in self.driver.current_url:
+            self.driver.get(url)
+        html_content = self.driver.page_source
+        return self.page_source_parser(html_content)
+    def page_source_parser(self, html_content):
+        match = re.search(r"var racePathList = (\[.*?\]);", html_content, re.DOTALL)
+        if match:
+            race_path_list_str = match.group(1)
+            cleaned_str = race_path_list_str.replace("'", '"')
+            try:
+                race_path_list_data = json.loads(cleaned_str)
+                return race_path_list_data
+            except json.JSONDecodeError as e:
+                print(f"Error parsing JSON: {e}")
+        else:
+            print("Could not find the 'racePathList' variable in the file.")
 
 class ZipDownloader:
     def __init__(self, directory, session_id, export_id):
@@ -250,6 +268,8 @@ class ZipExtractor:
     def extract_all_zips(self):
         race_data_files = [file for file in os.listdir(self.event_path) if 'race_data_' in file]
         boats_dict_files = [file for file in os.listdir(self.event_path) if 'boats_dict_' in file]
+        race_path_files = [file for file in os.listdir(self.event_path) if 'race_path_' in file]
+
         for zip_file in self.zip_file_list:
             zip_file_path = os.path.join(self.event_path, zip_file.replace('.zip', ''))
             with zipfile.ZipFile(zip_file, 'r') as zip_ref:
@@ -265,8 +285,12 @@ class ZipExtractor:
             # Moving boats_dict files
             boats_dict_file = 'boats_dict_' + race_id + '.json'
             boats_dict_file_path = os.path.join(zip_file_path, boats_dict_file)
-            print(os.path.join(self.event_path, boats_dict_file))
             os.rename(os.path.join(self.event_path, boats_dict_file), boats_dict_file_path)
+
+            # Moving boats_dict files
+            race_path_file = 'race_path_' + race_id + '.json'
+            race_path_file_path = os.path.join(zip_file_path, race_path_file)
+            os.rename(os.path.join(self.event_path, race_path_file), race_path_file_path)
 
     def remove_zip_files(self):
         for zip_file in self.zip_file_list:
@@ -288,7 +312,10 @@ if __name__ == "__main__":
     webdriver = webdriver.Chrome()
     session_id_extractor = SessionIDExtractor(webdriver)
     boats_dict_extractor = BoatsDictExtractor(webdriver)
+    race_path_list_extractor = RacePathListExtractor(webdriver)
 
+
+    i = 0
     for date, races in data['races'].items():
         for race in races:
             print(f"Race Title: {race['title']}")
@@ -325,6 +352,16 @@ if __name__ == "__main__":
             boats_dict = boats_dict_extractor.get_boats_dict(race['export_id'], race['race_link'])
             with open(f"{event_directory}/boats_dict_{race['export_id']}.json", 'w') as f:
                 json.dump(boats_dict, f, indent=2)
+
+            race_path = race_path_list_extractor.get_race_path_list(race['export_id'], race['race_link'])
+            with open(f"{event_directory}/race_path_{race['export_id']}.json", 'w') as f:
+                json.dump(race_path, f, indent=2)
+
+            i += 1
+            if i == 4:
+                break
+        if i == 4:
+            break
             
     zip_extractor = ZipExtractor(event_directory)
     zip_extractor.extract_all_zips()
