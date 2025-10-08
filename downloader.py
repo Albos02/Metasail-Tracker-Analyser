@@ -1,38 +1,68 @@
 import os
 import requests
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 import re
 from datetime import datetime
 import json
 import zipfile
+import sys
 
 
 class GetHTMLFile:
-    def __init__(self, directory):
-        self.directory = directory
-        self.html_files = self.list_html_files(directory)
+    def __init__(self, url):
+        self.event_url = url
+        # self.driver = driver
+        chrome_options = Options()
+        chrome_options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
+        self.driver = webdriver.Chrome(options=chrome_options)
+    def get_eventPHP_file(self):
+        file = None
+        i1 = 0
+        self.driver.get(self.event_url)
+        while file is None and i1 < 5:
+            i2 = 0
+            while self.driver.current_url != self.event_url and i2 < 5:
+                self.driver.get(self.event_url)
+            requests_found = self.get_all_network_requests()
+            for req in requests_found:
+                if "php" in req['url']:
+                    print(req)
+                    print('')
+                    event_php_file = requests.get(req['url'])
+                    file = event_php_file.text
+                    i2 += 1
+            i1 += 1
+        return file
+    def get_all_network_requests(self):
+        """Extract all network requests from performance logs"""
+        logs = self.driver.get_log('performance')
+        requests = []
+        
+        for log in logs:
+            try:
+                message = json.loads(log['message'])['message']
+                method = message.get('method')
+                
+                if method == 'Network.responseReceived':
+                    params = message['params']
+                    response = params['response']
+                    
+                    requests.append({
+                        'url': response['url'],
+                        'status': response['status'],
+                        'mime_type': response.get('mimeType', ''),
+                        'request_id': params.get('requestId', ''),
+                    })
+                    
+            except (KeyError, json.JSONDecodeError):
+                continue
+        
+        return requests
 
-    def list_html_files(self, directory):
-        html_files = []
-        for root, dirs, files in os.walk(directory):
-            for file in files:
-                if file.endswith(".html"):
-                    html_files.append(os.path.join(root, file))
-        return html_files
 
-    def choose_html_file(self):
-        if not self.html_files:
-            print("No html files found in directory.")
-            return None
-        print("Choose an html file:")
-        for i, file in enumerate(self.html_files):
-            print(f"{i+1}. {file}")
-        choice = int(input("Enter the number of the file: ")) - 1
-        if choice < 0 or choice >= len(self.html_files):
-            print("Invalid choice.")
-            return None
-        return self.html_files[choice]
+
 class HTMLParser:
     def __init__(self, HTML_FILE_CONTENT):
         self.HTML_FILE_CONTENT = HTML_FILE_CONTENT
@@ -155,14 +185,32 @@ class HTMLParser:
         return summary
 
 class SessionIDExtractor:
-    def __init__(self):
-        self.driver = webdriver.Chrome()
+    def __init__(self, driver):
+        self.driver = driver
         # self.driver.get("https://app.metasail.it/live/776/")
-    def get_id(self, url):
+    def get_id(self, race_id, url):
         self.driver.get(url)
         self.current_url = self.driver.current_url
         self.session_id = self.current_url.split("S(")[1].split(")")[0]
         return self.session_id
+class BoatsDictExtractor:
+    def __init__(self, driver):
+        self.driver = driver
+    def get_boats_dict(self, race_id, url):
+        if race_id not in self.driver.current_url:
+            self.driver.get(url)
+        html_content = self.driver.page_source
+        return self.page_source_parser(html_content)
+    def page_source_parser(self, html_content):
+        soup = BeautifulSoup(html_content, "html.parser")
+        boat_container = soup.find("div", id="barcheDivScrollabile")
+        boat_entries = boat_container.find_all("div", class_="row")
+        boats_dict = {}
+        for boat in boat_entries:
+            tracker_id = boat["id"].split("-")[1]
+            boat_name = boat.find("div", class_="descrizione").text.strip()
+            boats_dict[tracker_id] = boat_name
+        return boats_dict
 
 class ZipDownloader:
     def __init__(self, directory, session_id, export_id):
@@ -201,15 +249,24 @@ class ZipExtractor:
         return zip_files
     def extract_all_zips(self):
         race_data_files = [file for file in os.listdir(self.event_path) if 'race_data_' in file]
+        boats_dict_files = [file for file in os.listdir(self.event_path) if 'boats_dict_' in file]
         for zip_file in self.zip_file_list:
             zip_file_path = os.path.join(self.event_path, zip_file.replace('.zip', ''))
             with zipfile.ZipFile(zip_file, 'r') as zip_ref:
                 zip_ref.extractall(zip_file_path)
             
             race_id = zip_file.split('race_')[1].split('.zip')[0]
+
+            # Moving race_data files
             race_data_file = 'race_data_' + race_id + '.json'
             race_data_file_path = os.path.join(zip_file_path, race_data_file)
             os.rename(os.path.join(self.event_path, race_data_file), race_data_file_path)
+
+            # Moving boats_dict files
+            boats_dict_file = 'boats_dict_' + race_id + '.json'
+            boats_dict_file_path = os.path.join(zip_file_path, boats_dict_file)
+            print(os.path.join(self.event_path, boats_dict_file))
+            os.rename(os.path.join(self.event_path, boats_dict_file), boats_dict_file_path)
 
     def remove_zip_files(self):
         for zip_file in self.zip_file_list:
@@ -217,22 +274,21 @@ class ZipExtractor:
             os.remove(os.path.join(self.event_path, zip_file))
 
 if __name__ == "__main__":
+    url = sys.argv[1]
     directory = os.getcwd()
-    html_finder = GetHTMLFile(directory)
-    HTML_FILE = html_finder.choose_html_file()
 
-    if HTML_FILE:
-        print(f"Selected file: {HTML_FILE}")
-
-        with open(HTML_FILE, "r") as f:
-            HTML_FILE_CONTENT = f.read()
+    html_finder = GetHTMLFile(url)
+    HTML_FILE_CONTENT = html_finder.get_eventPHP_file()
     
     html_parser = HTMLParser(HTML_FILE_CONTENT)
     data = html_parser.get_event_data()
     summary = html_parser.get_race_summary()
     event_title = data['event_name'].replace(' ', '_')
 
-    selenium_session_id_extractor = SessionIDExtractor()
+    webdriver = webdriver.Chrome()
+    session_id_extractor = SessionIDExtractor(webdriver)
+    boats_dict_extractor = BoatsDictExtractor(webdriver)
+
     for date, races in data['races'].items():
         for race in races:
             print(f"Race Title: {race['title']}")
@@ -244,8 +300,9 @@ if __name__ == "__main__":
             print(f"Order: {race['order']}")
             print()
 
-            session_id = selenium_session_id_extractor.get_id(race['race_link'])
+            session_id = session_id_extractor.get_id(race['export_id'], race['race_link'])
             print(f"Session ID: {session_id}")
+
             print()
 
             event_directory = os.path.join(directory, 'events', event_title)
@@ -259,10 +316,15 @@ if __name__ == "__main__":
                 'export_id': race['export_id'],
                 'start_time': race['start_time'],
                 'category': race['category'],
-                'order': race['order']
+                'order': race['order'],
+                'session_id': session_id
             }
             with open(f"{event_directory}/race_data_{race['export_id']}.json", 'w') as f:
                 json.dump(race_data, f, indent=2)
+
+            boats_dict = boats_dict_extractor.get_boats_dict(race['export_id'], race['race_link'])
+            with open(f"{event_directory}/boats_dict_{race['export_id']}.json", 'w') as f:
+                json.dump(boats_dict, f, indent=2)
             
     zip_extractor = ZipExtractor(event_directory)
     zip_extractor.extract_all_zips()
