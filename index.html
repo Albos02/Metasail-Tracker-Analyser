@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Race Tracker Pro</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+            color: #fff;
+            overflow: hidden;
+        }
+
+        #map {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+        }
+
+        .overlay-panel {
+            position: absolute;
+            background: rgba(15, 20, 40, 0.95);
+            border-radius: 16px;
+            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 1000;
+        }
+
+        .event-selector {
+            top: 20px;
+            left: 20px;
+            padding: 20px;
+            min-width: 320px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .event-selector h2 {
+            font-size: 20px;
+            margin-bottom: 16px;
+            color: #64B5F6;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .event-list, .race-list {
+            margin-top: 12px;
+        }
+
+        .event-item, .race-item {
+            background: rgba(100, 181, 246, 0.1);
+            padding: 12px 16px;
+            margin: 8px 0;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .event-item:hover, .race-item:hover {
+            background: rgba(100, 181, 246, 0.2);
+            border-color: #64B5F6;
+            transform: translateX(5px);
+        }
+
+        .event-item.selected, .race-item.selected {
+            background: rgba(100, 181, 246, 0.3);
+            border-color: #64B5F6;
+        }
+
+        .item-badge {
+            background: #64B5F6;
+            color: #0a0e27;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .timeline-controls {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 24px 32px;
+            min-width: 700px;
+            max-width: 90vw;
+        }
+
+        .timeline-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .time-display {
+            font-size: 24px;
+            font-weight: 700;
+            color: #64B5F6;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .race-info {
+            font-size: 13px;
+            color: #90CAF9;
+        }
+
+        .timeline-slider {
+            width: 100%;
+            margin: 16px 0;
+            position: relative;
+        }
+
+        .slider {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: linear-gradient(to right, #1565C0, #42A5F5);
+            outline: none;
+            -webkit-appearance: none;
+            position: relative;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(100, 181, 246, 0.6);
+            transition: transform 0.2s;
+        }
+
+        .slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        .slider::-moz-range-thumb {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 4px 12px rgba(100, 181, 246, 0.6);
+        }
+
+        .time-markers {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 11px;
+            color: #90CAF9;
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #1976D2, #42A5F5);
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(25, 118, 210, 0.6);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn.danger {
+            background: linear-gradient(135deg, #D32F2F, #F44336);
+        }
+
+        .btn.success {
+            background: linear-gradient(135deg, #388E3C, #4CAF50);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px;
+            border-radius: 10px;
+        }
+
+        .speed-control, .filter-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px 16px;
+            border-radius: 10px;
+        }
+
+        .speed-control label, .filter-control label {
+            font-size: 13px;
+            color: #90CAF9;
+            font-weight: 600;
+        }
+
+        .speed-control select, .filter-control select {
+            background: rgba(100, 181, 246, 0.2);
+            color: white;
+            border: 1px solid rgba(100, 181, 246, 0.3);
+            padding: 8px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .legend {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 20px;
+            max-height: 70vh;
+            overflow-y: auto;
+            min-width: 280px;
+        }
+
+        .legend h3 {
+            margin-bottom: 16px;
+            font-size: 18px;
+            color: #64B5F6;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 10px 0;
+            font-size: 13px;
+            padding: 8px;
+            border-radius: 8px;
+            transition: background 0.3s;
+            cursor: pointer;
+        }
+
+        .legend-item:hover {
+            background: rgba(100, 181, 246, 0.1);
+        }
+
+        .legend-item.hidden {
+            opacity: 0.4;
+        }
+
+        .legend-color {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            flex-shrink: 0;
+        }
+
+        .legend-details {
+            flex: 1;
+        }
+
+        .legend-name {
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .legend-stats {
+            font-size: 11px;
+            color: #90CAF9;
+        }
+
+        .stats-panel {
+            bottom: 30px;
+            right: 20px;
+            padding: 20px;
+            min-width: 280px;
+        }
+
+        .stats-panel h3 {
+            font-size: 16px;
+            color: #64B5F6;
+            margin-bottom: 12px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-label {
+            color: #90CAF9;
+            font-size: 13px;
+        }
+
+        .stat-value {
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .boat-icon {
+            filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
+        }
+
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 2000;
+        }
+
+        .spinner {
+            border: 4px solid rgba(100, 181, 246, 0.2);
+            border-top: 4px solid #64B5F6;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(76, 175, 80, 0.95);
+            padding: 16px 24px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            z-index: 3000;
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateX(-50%) translateY(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(-50%) translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .notification.error {
+            background: rgba(244, 67, 54, 0.95);
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(100, 181, 246, 0.3);
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+
+        .search-box:focus {
+            outline: none;
+            border-color: #64B5F6;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .heatmap-toggle, .trace-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .toggle-switch {
+            width: 44px;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            position: relative;
+            transition: background 0.3s;
+        }
+
+        .toggle-switch.active {
+            background: #4CAF50;
+        }
+
+        .toggle-slider {
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.3s;
+        }
+
+        .toggle-switch.active .toggle-slider {
+            transform: translateX(20px);
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100, 181, 246, 0.5);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(100, 181, 246, 0.7);
+        }
+
+        .measure-tool {
+            background: rgba(255, 152, 0, 0.2);
+            border: 2px solid #FF9800;
+        }
+
+        .back-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="overlay-panel event-selector" id="eventSelector">
+        <h2>🏁 Race Events</h2>
+        <input type="text" class="search-box" id="eventSearch" placeholder="Search events...">
+        <div class="event-list" id="eventList"></div>
+    </div>
+
+    <div class="overlay-panel legend" id="legend" style="display: none;">
+        <h3>🚤 Boats & Markers</h3>
+        <div class="heatmap-toggle" onclick="toggleHeatmap()">
+            <div class="toggle-switch" id="heatmapToggle">
+                <div class="toggle-slider"></div>
+            </div>
+            <span>Speed Heatmap</span>
+        </div>
+        <div class="trace-toggle" onclick="toggleTraces()">
+            <div class="toggle-switch active" id="traceToggle">
+                <div class="toggle-slider"></div>
+            </div>
+            <span>Show Traces</span>
+        </div>
+        <div id="legend-items"></div>
+    </div>
+
+    <div class="overlay-panel stats-panel" id="statsPanel" style="display: none;">
+        <h3>📊 Race Statistics</h3>
+        <div id="statsContent"></div>
+    </div>
+
+    <div class="overlay-panel timeline-controls" id="timelineControls" style="display: none;">
+        <div class="timeline-header">
+            <div>
+                <div class="time-display" id="timeDisplay">00:00:00</div>
+                <div class="race-info" id="raceInfo">Race not started</div>
+            </div>
+            <div class="btn-group">
+                <button class="btn" onclick="exportData()">💾 Export</button>
+                <button class="btn" onclick="takeSnapshot()">📸 Snapshot</button>
+            </div>
+        </div>
+        <div class="timeline-slider">
+            <input type="range" min="0" max="100" value="0" class="slider" id="timelineSlider">
+            <div class="time-markers" id="timeMarkers"></div>
+        </div>
+        <div class="control-buttons">
+            <button class="btn success" id="playBtn" onclick="togglePlay()">▶ Play</button>
+            <button class="btn" onclick="restart()">⟲ Restart</button>
+            <button class="btn" onclick="skipBackward()">⏪ -10s</button>
+            <button class="btn" onclick="skipForward()">⏩ +10s</button>
+            <div class="speed-control">
+                <label>Speed:</label>
+                <select id="speedSelect" onchange="changeSpeed()">
+                    <option value="0.25">0.25x</option>
+                    <option value="0.5">0.5x</option>
+                    <option value="1" selected>1x</option>
+                    <option value="2">2x</option>
+                    <option value="5">5x</option>
+                    <option value="10">10x</option>
+                    <option value="20">20x</option>
+                    <option value="50">50x</option>
+                </select>
+            </div>
+            <div class="filter-control">
+                <label>View:</label>
+                <select id="viewSelect" onchange="changeView()">
+                    <option value="all">All Boats</option>
+                    <option value="top5">Top 5</option>
+                    <option value="leader">Leader Only</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.js"></script>
+    <script>
+        let map, traces = {}, markers = {}, polylines = {}, boatNames = {}, raceMarks = {};
+        let isPlaying = false;
+        let currentTime = 0;
+        let minTime = 0, maxTime = 0;
+        let animationSpeed = 1;
+        let animationFrame;
+        let lastUpdateTime = 0;
+        let hiddenBoats = new Set();
+        let showTraces = true;
+        let showHeatmap = false;
+        let selectedEvent = null;
+        let selectedRace = null;
+
+        const colors = ['#2196F3', '#F44336', '#4CAF50', '#9C27B0', '#FF9800', '#00BCD4', '#E91E63', '#8BC34A', '#FF5722', '#3F51B5', '#FFC107', '#009688', '#795548', '#607D8B'];
+
+        // Initialize map
+        map = L.map('map').setView([46.8182, 8.2275], 8);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Load events from index.json
+        async function loadEvents() {
+            try {
+                const response = await fetch('events/index.json');
+                if (!response.ok) {
+                    throw new Error('Failed to load events index');
+                }
+                const events = await response.json();
+                console.log('Loaded events:', events);
+                displayEvents(events);
+            } catch (error) {
+                console.error('Error loading events:', error);
+                showNotification('Please run generate_index.py to create events/index.json', 'error');
+            }
+        }
+
+        function initializeEventSelector() {
+            loadEvents();
+        }
+
+        function displayEvents(events) {
+            const eventList = document.getElementById('eventList');
+            eventList.innerHTML = '';
+
+            events.forEach((event, idx) => {
+                const eventDiv = document.createElement('div');
+                eventDiv.className = 'event-item';
+                eventDiv.innerHTML = `
+                    <span>${event.name}</span>
+                    <span class="item-badge">${event.races.length} races</span>
+                `;
+                eventDiv.onclick = () => selectEvent(event, idx);
+                eventList.appendChild(eventDiv);
+            });
+        }
+
+        function selectEvent(event, idx) {
+            selectedEvent = event;
+            const eventList = document.getElementById('eventList');
+            eventList.innerHTML = `
+                <button class="back-btn" onclick="initializeEventSelector()">← Back to Events</button>
+                <h3 style="margin-bottom: 12px; color: #64B5F6;">${event.name}</h3>
+            `;
+
+            const raceList = document.createElement('div');
+            raceList.className = 'race-list';
+            event.races.forEach((race, rIdx) => {
+                const raceDiv = document.createElement('div');
+                raceDiv.className = 'race-item';
+                const statusIcon = race.has_combined ? '✓' : '⚠';
+                raceDiv.innerHTML = `
+                    <span>${statusIcon} ${race.name}</span>
+                    <span class="item-badge">${race.num_files} files</span>
+                `;
+                raceDiv.onclick = () => loadRace(event, race.name, rIdx);
+                raceList.appendChild(raceDiv);
+            });
+            eventList.appendChild(raceList);
+        }
+
+        async function loadRace(event, raceName, raceIdx) {
+            showLoading();
+            selectedRace = raceName;
+            
+            try {
+                console.log('Loading race:', raceName, 'from event:', event);
+                
+                // Extract race ID from the race name (e.g., "Race 1 (race_12345)" -> "race_12345")
+                const match = raceName.match(/\(([^)]+)\)/);
+                const raceId = match ? match[1] : null;
+                
+                console.log('Extracted race ID:', raceId);
+                
+                if (!raceId) {
+                    throw new Error(`Failed to extract race ID from race name: ${raceName}`);
+                }
+                
+                const raceFolder = event.folder;
+                const racePath = `events/${raceFolder}/${raceId}`;
+                
+                console.log('Race path:', racePath);
+                
+                // First, try to load combined_data.csv
+                let raceData = null;
+                try {
+                    const combinedPath = `${racePath}/combined_data.csv`;
+                    console.log('Trying to load combined data from:', combinedPath);
+                    const response = await fetch(combinedPath);
+                    if (response.ok) {
+                        raceData = await response.text();
+                        console.log('Loaded combined data, length:', raceData.length);
+                    }
+                } catch (e) {
+                    console.log('Combined data not found, will try loading individual files');
+                }
+                
+                // If combined data doesn't exist, load and combine individual files
+                if (!raceData || raceData.trim().length === 0) {
+                    console.log('Loading individual trace files...');
+                    raceData = await loadAndCombineFiles(racePath);
+                }
+                
+                if (!raceData || raceData.trim().length === 0) {
+                    throw new Error('No race data found - neither combined_data.csv nor individual files');
+                }
+                
+                console.log('Total race data loaded, length:', raceData.length);
+                
+                // Load boat names if available
+                const raceNumber = raceId.split('_')[1];
+                try {
+                    const boatsPath = `${racePath}/boats_dict_${raceNumber}.json`;
+                    console.log('Trying to load boat names from:', boatsPath);
+                    const boatsResponse = await fetch(boatsPath);
+                    if (boatsResponse.ok) {
+                        boatNames = await boatsResponse.json();
+                        console.log('Loaded boat names:', boatNames);
+                    }
+                } catch (e) {
+                    console.log('No boat names file found:', e);
+                }
+                
+                // Load race marks if available
+                try {
+                    const marksPath = `${racePath}/race_path_${raceNumber}.json`;
+                    console.log('Trying to load race marks from:', marksPath);
+                    const marksResponse = await fetch(marksPath);
+                    if (marksResponse.ok) {
+                        const marksData = await marksResponse.json();
+                        raceMarks = {};
+                        marksData.forEach(mark => {
+                            raceMarks[mark.seriale1] = [mark.boa1, mark.boa2];
+                            raceMarks[mark.seriale2] = [mark.boa1, mark.boa2];
+                        });
+                        console.log('Loaded race marks:', raceMarks);
+                    }
+                } catch (e) {
+                    console.log('No race marks file found:', e);
+                }
+                
+                // Parse the GPS data
+                console.log('Parsing GPS data...');
+                parseGPSData(raceData);
+                console.log('GPS data parsed successfully');
+                
+                // Update UI
+                document.getElementById('eventSelector').style.display = 'none';
+                document.getElementById('legend').style.display = 'block';
+                document.getElementById('statsPanel').style.display = 'block';
+                document.getElementById('timelineControls').style.display = 'block';
+                document.getElementById('raceInfo').textContent = `${raceName} - ${event.name}`;
+                
+                showNotification(`Loaded ${raceName} from ${event.name}`);
+            } catch (error) {
+                console.error('Error loading race:', error);
+                showNotification(`Error loading race: ${error.message}`, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function loadAndCombineFiles(racePath) {
+            console.log('Attempting to load individual files from:', racePath);
+            let combinedData = '';
+            let fileNum = 1;
+            let consecutiveFailures = 0;
+            
+            // Try to load files named "1", "2", "3", etc.
+            while (consecutiveFailures < 3) {
+                try {
+                    const filePath = `${racePath}/${fileNum}`;
+                    console.log(`Trying to load file: ${filePath}`);
+                    
+                    const response = await fetch(filePath);
+                    if (response.ok) {
+                        const content = await response.text();
+                        if (content && content.trim().length > 0) {
+                            combinedData += content;
+                            console.log(`Loaded file ${fileNum}, added ${content.length} characters`);
+                            consecutiveFailures = 0;
+                            fileNum++;
+                        } else {
+                            consecutiveFailures++;
+                        }
+                    } else {
+                        console.log(`File ${fileNum} not found (${response.status})`);
+                        consecutiveFailures++;
+                        fileNum++;
+                    }
+                } catch (error) {
+                    console.log(`Error loading file ${fileNum}:`, error);
+                    consecutiveFailures++;
+                    fileNum++;
+                }
+                
+                // Safety limit
+                if (fileNum > 100) {
+                    console.log('Reached safety limit of 100 files');
+                    break;
+                }
+            }
+            
+            console.log(`Loaded ${fileNum - 1} files, total data length: ${combinedData.length}`);
+            return combinedData;
+        }
+
+        function generateSampleRaceData() {
+            let data = '';
+            const baseTime = 1633024800;
+            const numBoats = 8;
+            const numPoints = 120;
+
+            for (let boat = 0; boat < numBoats; boat++) {
+                const startLat = 47.37 + (Math.random() - 0.5) * 0.02;
+                const startLon = 8.54 + (Math.random() - 0.5) * 0.02;
+                
+                for (let i = 0; i < numPoints; i++) {
+                    const time = baseTime + i * 30;
+                    const lat = startLat + (i * 0.0005) + (Math.random() - 0.5) * 0.0002;
+                    const lon = startLon + (i * 0.0003) + (Math.random() - 0.5) * 0.0002;
+                    const heading = (boat * 45 + i * 2) % 360;
+                    const speed = 18 + Math.random() * 10;
+                    
+                    data += `A${(1001 + boat).toString()}|${time}|${lon.toFixed(6)}|${lat.toFixed(6)}|0|0|${heading.toFixed(1)}|${speed.toFixed(1)} kn|0|0|0|0|0|0|0|0|0|0|0\n`;
+                }
+            }
+            return data;
+        }
+
+        function parseGPSData(content) {
+            const data = content.split('A').filter(x => x.trim());
+            traces = {};
+            
+            data.forEach(row => {
+                const fields = row.split('|');
+                if (fields.length < 8) return;
+                
+                const trackerID = parseInt(fields[0]);
+                const timestamp = parseInt(fields[1]);
+                const lon = parseFloat(fields[2]);
+                const lat = parseFloat(fields[3]);
+                const heading = parseFloat(fields[6]) || 0;
+                const speedStr = fields[7];
+                const speed = parseFloat(speedStr.replace(' kn', '')) || 0;
+                
+                if (!traces[trackerID]) {
+                    traces[trackerID] = [];
+                }
+                
+                traces[trackerID].push({
+                    timestamp: timestamp,
+                    lat: lat,
+                    lon: lon,
+                    heading: heading,
+                    speed: speed
+                });
+            });
+            
+            Object.keys(traces).forEach(id => {
+                traces[id].sort((a, b) => a.timestamp - b.timestamp);
+            });
+            
+            const allTimestamps = Object.values(traces).flat().map(p => p.timestamp);
+            minTime = Math.min(...allTimestamps);
+            maxTime = Math.max(...allTimestamps);
+            currentTime = minTime;
+            
+            initializeMap();
+            updateRaceInfo();
+            updateTimeMarkers();
+        }
+
+        function initializeMap() {
+            Object.values(markers).forEach(m => map.removeLayer(m));
+            Object.values(polylines).forEach(p => map.removeLayer(p));
+            markers = {};
+            polylines = {};
+            
+            const allPoints = Object.values(traces).flat();
+            const avgLat = allPoints.reduce((sum, p) => sum + p.lat, 0) / allPoints.length;
+            const avgLon = allPoints.reduce((sum, p) => sum + p.lon, 0) / allPoints.length;
+            map.setView([avgLat, avgLon], 14);
+            
+            let legendHTML = '';
+            Object.keys(traces).forEach((trackerID, idx) => {
+                const color = colors[idx % colors.length];
+                const points = traces[trackerID];
+                
+                // Get boat name from loaded data
+                const fullTracker = 'A' + String(trackerID).padStart(4, '0');
+                let displayName = `Boat ${trackerID}`;
+                let isMark = false;
+                
+                if (boatNames[fullTracker]) {
+                    displayName = boatNames[fullTracker];
+                } else if (raceMarks[fullTracker]) {
+                    displayName = `Mark: ${raceMarks[fullTracker][0]}`;
+                    isMark = true;
+                }
+                
+                const coords = points.map(p => [p.lat, p.lon]);
+                
+                // Use dashed line for marks, solid for boats
+                polylines[trackerID] = L.polyline(coords, {
+                    color: color,
+                    weight: isMark ? 2 : 3,
+                    opacity: showTraces ? 0.6 : 0,
+                    dashArray: isMark ? '10, 10' : null
+                }).addTo(map);
+                
+                // Different icon for marks vs boats
+                let iconHTML;
+                if (isMark) {
+                    iconHTML = `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+                                    <g transform="translate(16,16)">
+                                        <circle cx="0" cy="0" r="10" fill="${color}" stroke="white" stroke-width="2.5"/>
+                                        <circle cx="0" cy="0" r="4" fill="white"/>
+                                    </g>
+                                </svg>`;
+                } else {
+                    iconHTML = `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+                                    <g transform="translate(16,16) rotate(0)">
+                                        <path d="M0,-14 L-5,10 L0,7 L5,10 Z" fill="${color}" stroke="white" stroke-width="2.5"/>
+                                        <circle cx="0" cy="0" r="2" fill="white"/>
+                                    </g>
+                                </svg>`;
+                }
+                
+                const boatIcon = L.divIcon({
+                    className: 'boat-icon',
+                    html: iconHTML,
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16]
+                });
+                
+                markers[trackerID] = L.marker([points[0].lat, points[0].lon], {
+                    icon: boatIcon
+                }).addTo(map);
+                
+                markers[trackerID].bindPopup(`<b>${displayName}</b><br>Speed: 0 kts<br>Heading: 0°`);
+                
+                // Store if it's a mark for later use
+                markers[trackerID].isMark = isMark;
+                markers[trackerID].displayName = displayName;
+                
+                const avgSpeed = (points.reduce((sum, p) => sum + p.speed, 0) / points.length).toFixed(1);
+                const maxSpeed = Math.max(...points.map(p => p.speed)).toFixed(1);
+                
+                const iconSymbol = isMark ? '📍' : '⛵';
+                legendHTML += `
+                    <div class="legend-item" onclick="toggleBoat(${trackerID})">
+                        <div class="legend-color" style="background: ${color}"></div>
+                        <div class="legend-details">
+                            <div class="legend-name">${iconSymbol} ${displayName}</div>
+                            <div class="legend-stats">${isMark ? 'Race Mark' : `Avg: ${avgSpeed} kts | Max: ${maxSpeed} kts`}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('legend-items').innerHTML = legendHTML;
+            updateStats();
+            addRaceCommLine();
+        }
+
+        function addRaceCommLine() {
+            // Find all marks that include 'RACE COMM' in their name
+            const raceCommMarks = Object.keys(markers).filter(id => markers[id].isMark && markers[id].displayName.toUpperCase().includes('RACE COMM'));
+            
+            if (raceCommMarks.length === 2) {
+                const pos1 = markers[raceCommMarks[0]].getLatLng();
+                const pos2 = markers[raceCommMarks[1]].getLatLng();
+                
+                L.polyline([pos1, pos2], {
+                    color: '#FFFFFF',
+                    weight: 3,
+                    opacity: 0.8,
+                    dashArray: '5, 5'
+                }).addTo(map);
+            }
+        }
+
+        function updateBoatPositions(time) {
+            const positions = [];
+            
+            Object.keys(traces).forEach((trackerID, idx) => {
+                if (hiddenBoats.has(trackerID)) {
+                    if (markers[trackerID]) {
+                        markers[trackerID].setOpacity(0);
+                    }
+                    return;
+                }
+                
+                const points = traces[trackerID];
+                const color = colors[idx % colors.length];
+                
+                let point = points[0];
+                let nextPoint = points[0];
+                for (let i = 0; i < points.length - 1; i++) {
+                    if (points[i].timestamp <= time && points[i + 1].timestamp >= time) {
+                        point = points[i];
+                        nextPoint = points[i + 1];
+                        break;
+                    } else if (points[i].timestamp <= time) {
+                        point = points[i];
+                    }
+                }
+                
+                // Interpolate position
+                if (nextPoint.timestamp !== point.timestamp) {
+                    const progress = (time - point.timestamp) / (nextPoint.timestamp - point.timestamp);
+                    const lat = point.lat + (nextPoint.lat - point.lat) * progress;
+                    const lon = point.lon + (nextPoint.lon - point.lon) * progress;
+                    const heading = point.heading + (nextPoint.heading - point.heading) * progress;
+                    const speed = point.speed + (nextPoint.speed - point.speed) * progress;
+                    
+                    point = { lat, lon, heading, speed, timestamp: time };
+                }
+                
+                positions.push({ trackerID, point, color });
+                
+                if (markers[trackerID]) {
+                    markers[trackerID].setLatLng([point.lat, point.lon]);
+                    markers[trackerID].setOpacity(1);
+                    
+                    let boatIcon;
+                    if (markers[trackerID].isMark) {
+                        // Keep circle for marks, no rotation
+                        boatIcon = L.divIcon({
+                            className: 'boat-icon',
+                            html: `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+                                    <g transform="translate(16,16)">
+                                        <circle cx="0" cy="0" r="10" fill="${color}" stroke="white" stroke-width="2.5"/>
+                                        <circle cx="0" cy="0" r="4" fill="white"/>
+                                    </g>
+                                  </svg>`,
+                            iconSize: [32, 32],
+                            iconAnchor: [16, 16]
+                        });
+                    } else {
+                        // Boat shape with rotation
+                        boatIcon = L.divIcon({
+                            className: 'boat-icon',
+                            html: `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+                                    <g transform="translate(16,16) rotate(${point.heading-90})">
+                                        <path d="M0,-14 L-5,10 L0,7 L5,10 Z" fill="${color}" stroke="white" stroke-width="2.5"/>
+                                        <circle cx="0" cy="0" r="2" fill="white"/>
+                                    </g>
+                                  </svg>`,
+                            iconSize: [32, 32],
+                            iconAnchor: [16, 16]
+                        });
+                    }
+                    markers[trackerID].setIcon(boatIcon);
+                    
+                    // Calculate personal stats
+                    const allPoints = traces[trackerID];
+                    const avgSpeed = (allPoints.reduce((sum, p) => sum + p.speed, 0) / allPoints.length).toFixed(1);
+                    const maxSpeed = Math.max(...allPoints.map(p => p.speed)).toFixed(1);
+                    let totalDistance = 0;
+                    for (let i = 1; i < allPoints.length; i++) {
+                        totalDistance += getDistance(allPoints[i - 1], allPoints[i]);
+                    }
+                    
+                    markers[trackerID].bindPopup(
+                        `<b>${markers[trackerID].displayName}</b><br>` +
+                        `Speed: ${point.speed.toFixed(1)} kts<br>` +
+                        `Heading: ${point.heading.toFixed(0)}°<br>` +
+                        `<br><b>Personal Stats:</b><br>` +
+                        `Avg Speed: ${avgSpeed} kts<br>` +
+                        `Max Speed: ${maxSpeed} kts<br>` +
+                        `Total Distance: ${(totalDistance / 1000).toFixed(1)} km`
+                    );
+                }
+            });
+            
+            const date = new Date(time * 1000);
+            document.getElementById('timeDisplay').textContent = date.toLocaleTimeString();
+            
+            const progress = ((time - minTime) / (maxTime - minTime)) * 100;
+            document.getElementById('timelineSlider').value = progress;
+            
+            updateStats();
+        }
+
+        function animate(timestamp) {
+            if (!isPlaying) return;
+            
+            if (!lastUpdateTime) lastUpdateTime = timestamp;
+            const deltaTime = timestamp - lastUpdateTime;
+            lastUpdateTime = timestamp;
+            
+            currentTime += (deltaTime / 1000) * animationSpeed * 10;
+            
+            if (currentTime > maxTime) {
+                currentTime = minTime;
+            }
+            
+            updateBoatPositions(currentTime);
+            animationFrame = requestAnimationFrame(animate);
+        }
+
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            const btn = document.getElementById('playBtn');
+            
+            if (isPlaying) {
+                btn.innerHTML = '⏸ Pause';
+                btn.className = 'btn danger';
+                lastUpdateTime = 0;
+                animationFrame = requestAnimationFrame(animate);
+            } else {
+                btn.innerHTML = '▶ Play';
+                btn.className = 'btn success';
+                if (animationFrame) {
+                    cancelAnimationFrame(animationFrame);
+                }
+            }
+        }
+
+        function restart() {
+            currentTime = minTime;
+            updateBoatPositions(currentTime);
+        }
+
+        function skipBackward() {
+            currentTime = Math.max(minTime, currentTime - 10);
+            updateBoatPositions(currentTime);
+        }
+
+        function skipForward() {
+            currentTime = Math.min(maxTime, currentTime + 10);
+            updateBoatPositions(currentTime);
+        }
+
+        function changeSpeed() {
+            animationSpeed = parseFloat(document.getElementById('speedSelect').value);
+        }
+
+        function changeView() {
+            const view = document.getElementById('viewSelect').value;
+            hiddenBoats.clear();
+            
+            if (view === 'top5' || view === 'leader') {
+                const boatSpeeds = Object.keys(traces).map(id => {
+                    const avgSpeed = traces[id].reduce((sum, p) => sum + p.speed, 0) / traces[id].length;
+                    return { id, avgSpeed };
+                }).sort((a, b) => b.avgSpeed - a.avgSpeed);
+                
+                const hideCount = view === 'leader' ? boatSpeeds.length - 1 : boatSpeeds.length - 5;
+                boatSpeeds.slice(view === 'leader' ? 1 : 5).forEach(boat => {
+                    hiddenBoats.add(boat.id);
+                });
+            }
+            
+            updateBoatPositions(currentTime);
+            updateLegendDisplay();
+        }
+
+        function toggleBoat(trackerID) {
+            if (hiddenBoats.has(trackerID)) {
+                hiddenBoats.delete(trackerID);
+            } else {
+                hiddenBoats.add(trackerID);
+            }
+            updateBoatPositions(currentTime);
+            updateLegendDisplay();
+            markers[trackerID].openPopup();
+        }
+
+        function updateLegendDisplay() {
+            const items = document.querySelectorAll('.legend-item');
+            items.forEach((item, idx) => {
+                const trackerID = Object.keys(traces)[idx];
+                if (hiddenBoats.has(trackerID)) {
+                    item.classList.add('hidden');
+                } else {
+                    item.classList.remove('hidden');
+                }
+            });
+        }
+
+        function toggleTraces() {
+            showTraces = !showTraces;
+            const toggle = document.getElementById('traceToggle');
+            toggle.classList.toggle('active');
+            
+            Object.values(polylines).forEach(polyline => {
+                polyline.setStyle({ opacity: showTraces ? 0.6 : 0 });
+            });
+        }
+
+        function toggleHeatmap() {
+            showHeatmap = !showHeatmap;
+            const toggle = document.getElementById('heatmapToggle');
+            toggle.classList.toggle('active');
+            
+            if (showHeatmap) {
+                Object.keys(traces).forEach((trackerID, idx) => {
+                    const points = traces[trackerID];
+                    const speeds = points.map(p => p.speed);
+                    const minSpeed = Math.min(...speeds);
+                    const maxSpeed = Math.max(...speeds);
+                    
+                    const segments = [];
+                    for (let i = 0; i < points.length - 1; i++) {
+                        const speed = points[i].speed;
+                        const normalized = (speed - minSpeed) / (maxSpeed - minSpeed);
+                        const color = `hsl(${normalized * 120}, 100%, 50%)`;
+                        
+                        L.polyline(
+                            [[points[i].lat, points[i].lon], [points[i + 1].lat, points[i + 1].lon]],
+                            { color: color, weight: 4, opacity: 0.8 }
+                        ).addTo(map);
+                    }
+                });
+            } else {
+                initializeMap();
+            }
+        }
+
+        function updateStats() {
+            const visibleBoats = Object.keys(traces).filter(id => !hiddenBoats.has(id));
+            const allPoints = visibleBoats.flatMap(id => traces[id]);
+            
+            if (allPoints.length === 0) return;
+            
+            const speeds = allPoints.map(p => p.speed);
+            const avgSpeed = (speeds.reduce((a, b) => a + b, 0) / speeds.length).toFixed(1);
+            const maxSpeed = Math.max(...speeds).toFixed(1);
+            const totalDistance = visibleBoats.reduce((sum, id) => {
+                const points = traces[id];
+                let dist = 0;
+                for (let i = 1; i < points.length; i++) {
+                    dist += getDistance(points[i - 1], points[i]);
+                }
+                return sum + dist;
+            }, 0);
+            
+            const duration = ((maxTime - minTime) / 60).toFixed(0);
+            
+            document.getElementById('statsContent').innerHTML = `
+                <div class="stat-row">
+                    <span class="stat-label">Active Boats</span>
+                    <span class="stat-value">${visibleBoats.length}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Avg Speed</span>
+                    <span class="stat-value">${avgSpeed} kts</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Max Speed</span>
+                    <span class="stat-value">${maxSpeed} kts</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Total Distance</span>
+                    <span class="stat-value">${(totalDistance / 1000).toFixed(1)} km</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Duration</span>
+                    <span class="stat-value">${duration} min</span>
+                </div>
+            `;
+        }
+
+        function getDistance(p1, p2) {
+            const R = 6371e3;
+            const φ1 = p1.lat * Math.PI / 180;
+            const φ2 = p2.lat * Math.PI / 180;
+            const Δφ = (p2.lat - p1.lat) * Math.PI / 180;
+            const Δλ = (p2.lon - p1.lon) * Math.PI / 180;
+            
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            
+            return R * c;
+        }
+
+        function updateRaceInfo() {
+            const duration = new Date((maxTime - minTime) * 1000).toISOString().substr(11, 8);
+            document.getElementById('raceInfo').textContent = 
+                `${Object.keys(traces).length} boats | Duration: ${duration}`;
+        }
+
+        function updateTimeMarkers() {
+            const markers = [];
+            for (let i = 0; i <= 4; i++) {
+                const time = minTime + (maxTime - minTime) * (i / 4);
+                const date = new Date(time * 1000);
+                markers.push(date.toLocaleTimeString());
+            }
+            document.getElementById('timeMarkers').innerHTML = 
+                markers.map(m => `<span>${m}</span>`).join('');
+        }
+
+        function exportData() {
+            const data = {
+                traces: traces,
+                minTime: minTime,
+                maxTime: maxTime,
+                event: selectedEvent,
+                race: selectedRace
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `race_data_${Date.now()}.json`;
+            a.click();
+            showNotification('Race data exported successfully');
+        }
+
+        function takeSnapshot() {
+            showNotification('Taking snapshot... (Feature requires additional libraries)');
+        }
+
+        function showLoading() {
+            const loading = document.createElement('div');
+            loading.id = 'loadingOverlay';
+            loading.className = 'loading';
+            loading.innerHTML = '<div class="spinner"></div><div>Loading race data...</div>';
+            document.body.appendChild(loading);
+        }
+
+        function hideLoading() {
+            const loading = document.getElementById('loadingOverlay');
+            if (loading) loading.remove();
+        }
+
+        function showNotification(message, type = 'success') {
+            const notif = document.createElement('div');
+            notif.className = `notification ${type}`;
+            notif.textContent = message;
+            document.body.appendChild(notif);
+            
+            setTimeout(() => {
+                notif.remove();
+            }, 3000);
+        }
+
+        document.getElementById('timelineSlider').addEventListener('input', function(e) {
+            const progress = parseFloat(e.target.value) / 100;
+            currentTime = minTime + (maxTime - minTime) * progress;
+            updateBoatPositions(currentTime);
+        });
+
+        document.getElementById('eventSearch').addEventListener('input', function(e) {
+            const search = e.target.value.toLowerCase();
+            const items = document.querySelectorAll('.event-item, .race-item');
+            items.forEach(item => {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(search) ? 'flex' : 'none';
+            });
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                togglePlay();
+            } else if (e.code === 'ArrowLeft') {
+                skipBackward();
+            } else if (e.code === 'ArrowRight') {
+                skipForward();
+            } else if (e.code === 'KeyR') {
+                restart();
+            }
+        });
+
+        // Initialize
+        initializeEventSelector();
+    </script>
+</body>
+</html>
