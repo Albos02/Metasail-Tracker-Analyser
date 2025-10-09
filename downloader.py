@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -23,8 +24,9 @@ class GetHTMLFile:
         self.driver.get(self.event_url)
         while file is None and i1 < 5:
             i2 = 0
-            while self.driver.current_url != self.event_url and i2 < 5:
+            while self.driver.current_url != self.event_url and i2 < 2:
                 self.driver.get(self.event_url)
+                time.sleep(0.2*i2)
                 i2 += 1
             requests_found = self.get_all_network_requests()
             for req in requests_found:
@@ -302,7 +304,11 @@ if __name__ == "__main__":
     directory = os.getcwd()
 
     html_finder = GetHTMLFile(url)
-    HTML_FILE_CONTENT = html_finder.get_eventPHP_file()
+    HTML_FILE_CONTENT = None
+    i = 0
+    while HTML_FILE_CONTENT is None and i < 5:
+        HTML_FILE_CONTENT = html_finder.get_eventPHP_file()
+        i += 1
     
     html_parser = HTMLParser(HTML_FILE_CONTENT)
     data = html_parser.get_event_data()
