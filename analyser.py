@@ -1,4 +1,5 @@
 import os
+import json
 import pandas as pd
 import folium
 import io
@@ -37,50 +38,95 @@ def parse_gps_data(file_path):
         print(tracker_id)
         df[df['TrackerID'] == tracker_id]
 
-    # Dictionary to store traces by vessel ID
+    # Dictionary to store traces by tracker ID
     traces = defaultdict(list)
 
     for index, row in df.iterrows():
         # Extract relevant fields
-        vessel_id = row['TrackerID']
+        tracker_id = row['TrackerID']
         timestamp = row['time?']
         longitude = row['lon']
         latitude = row['lat']
         speed = row['speed']  # Speed in knots (e.g., "22.7 kn")
 
-        # Store the point in the vessel's trace
-        traces[vessel_id].append({
+        # Store the point in the tracker's trace
+        traces[tracker_id].append({
             'timestamp': timestamp,
             'latitude': latitude,
             'longitude': longitude,
             'speed': speed
         })
 
-    # Sort each vessel's points by timestamp
-    for vessel_id in traces:
-        traces[vessel_id].sort(key=lambda x: x['timestamp'])
+    # Sort each tracker's points by timestamp
+    for tracker_id in traces:
+        traces[tracker_id].sort(key=lambda x: x['timestamp'])
 
     return traces
 
-def create_map(traces):
-    # Initialize map centered on the average coordinates
-    avg_lat = sum(point['latitude'] for vessel in traces.values() for point in vessel) / sum(len(vessel) for vessel in traces.values())
-    avg_lon = sum(point['longitude'] for vessel in traces.values() for point in vessel) / sum(len(vessel) for vessel in traces.values())
+def load_boat_names(race_id):
+    filename = f'boats_dict_{race_id}.json'
+    race_folder_name = f'race_{race_id}'
+    full_path = os.path.join(directory, event_folder, race_folder_name, filename)
+    with open(full_path, 'r') as f:
+        return json.load(f)
+
+def load_race_path(race_id):
+    filename = f'race_path_{race_id}.json'
+    race_folder_name = f'race_{race_id}'
+    full_path = os.path.join(directory, event_folder, race_folder_name, filename)
+    with open(full_path, 'r') as f:
+        data = json.load(f)
+
+    race_data = {}
+    for mark in data:
+        print(mark)
+        race_data[mark['seriale1']] = [mark['boa1'], mark['boa2']]
+        race_data[mark['seriale2']] = [mark['boa1'], mark['boa2']]
+    
+    print(race_data)
+    return race_data
+
+def create_map(traces, race_id=None):
+    avg_lat = sum(point['latitude'] for tracker in traces.values() for point in tracker) / sum(len(tracker) for tracker in traces.values())
+    avg_lon = sum(point['longitude'] for tracker in traces.values() for point in tracker) / sum(len(tracker) for tracker in traces.values())
     m = folium.Map(location=[avg_lat, avg_lon], zoom_start=12)
     
-    # Define colors for different vessels
     colors = ['blue', 'red', 'green', 'purple', 'orange', 'darkblue', 'darkred', 'darkgreen', 'cadetblue', 'pink']
     
-    # Plot each vessel's trace
-    for idx, (vessel_id, points) in enumerate(traces.items()):
-        # Create a polyline for the vessel's path
+    boat_names = load_boat_names(race_id)
+    race_path = load_race_path(race_id)
+    
+    for idx, (tracker_id, points) in enumerate(traces.items()):
+        print(idx, tracker_id)
+        boat_name = None
+        mark_name = None
+
+        full_tracker = 'A' + str(tracker_id).zfill(4)
+        boat_name = boat_names.get(full_tracker)
+        # print(boat_name)
+        mark_name = race_path.get(full_tracker)
+        if mark_name is not None:
+            mark_name = mark_name[0]
+        print(mark_name)
+
+        if boat_name is not None and mark_name is not None:
+            print(boat_name, mark_name)
+            raise Exception('Both boat_name and mark_name have values')
+        elif boat_name is None and mark_name is None:
+            tracker_name = full_tracker
+            # raise Exception('Both boat_name and mark_name are None')
+        elif boat_name is None:
+            tracker_name = mark_name
+        elif mark_name is None:
+            tracker_name = boat_name
+        
         locations = [(point['latitude'], point['longitude']) for point in points]
         folium.PolyLine(
             locations,
             color=colors[idx % len(colors)],
             weight=2.5,
             opacity=1,
-            popup=f"Vessel {vessel_id}"
+            popup=tracker_name
         ).add_to(m)
         
         # Add markers for start and end points
@@ -89,16 +135,18 @@ def create_map(traces):
         
         # Start point marker
         folium.Marker(
-            location=(start_point['latitude'], start_point['longitude']),
-            popup=f"Vessel {vessel_id} Start\nSpeed: {start_point['speed']}\nTime: {start_point['timestamp']}",
-            icon=folium.Icon(color=colors[idx % len(colors)], icon='play')
+            location=[0, 0],  # Hide the marker
+            popup='',  # No popup text
+            icon=folium.DivIcon(icon_size=(0, 0))  # Hide the icon
         ).add_to(m)
         
         # End point marker
         folium.Marker(
-            location=(end_point['latitude'], end_point['longitude']),
-            popup=f"Vessel {vessel_id} End\nSpeed: {end_point['speed']}\nTime: {end_point['timestamp']}",
-            icon=folium.Icon(color=colors[idx % len(colors)], icon='stop')
+            # location=(end_point['latitude'], end_point['longitude']),
+            location=[0, 0],
+            # popup=f"{boat_name} - End\nSpeed: {end_point['speed']:.1f} kts\nTime: {end_point['timestamp']}",
+            popup='',
+            icon=folium.Icon(icon_size=(0, 0))
         ).add_to(m)
     
     return m
@@ -106,12 +154,22 @@ def create_map(traces):
 def main(file_path):
     # Parse the GPS data
     traces = parse_gps_data(file_path)
+    
+    # Extract race_id from file_path if possible
+    race_id = None
+    path_parts = file_path.split(os.sep)
+    for part in path_parts:
+        if part.startswith('race_'):
+            try:
+                race_id = part.split('_')[1]
+                break
+            except (IndexError, ValueError):
+                continue
+    
 
-    # Create the map
-    map_object = create_map(traces)
+    map_object = create_map(traces, race_id)
     
     # Save the map to an HTML file in the same directory as the input file
-    # output_path = os.path.join(os.path.dirname(file_path), 'gps_traces_map.html')
     output_path = 'gps_traces_map.html'
     map_object.save(output_path)
     print(f"Map saved to {output_path}")
@@ -157,6 +215,7 @@ def combine_files(race_folder):
 if __name__ == "__main__":
     choice_1 = int(sys.argv[1])
     choice_2 = int(sys.argv[2])
+    directory = os.getcwd()
     event_folder = select_event_folder(choice_1)
     if event_folder:
         race_folder = select_race_folder(event_folder, choice_2)
