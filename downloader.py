@@ -315,7 +315,6 @@ if __name__ == "__main__":
     race_path_list_extractor = RacePathListExtractor(webdriver)
 
 
-    i = 0
     for date, races in data['races'].items():
         for race in races:
             print(f"Race Title: {race['title']}")
@@ -357,11 +356,7 @@ if __name__ == "__main__":
             with open(f"{event_directory}/race_path_{race['export_id']}.json", 'w') as f:
                 json.dump(race_path, f, indent=2)
 
-            i += 1
-            if i == 4:
-                break
-        if i == 4:
-            break
+
             
     zip_extractor = ZipExtractor(event_directory)
     zip_extractor.extract_all_zips()
