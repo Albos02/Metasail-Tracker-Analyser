@@ -25,6 +25,7 @@ class GetHTMLFile:
             i2 = 0
             while self.driver.current_url != self.event_url and i2 < 5:
                 self.driver.get(self.event_url)
+                i2 += 1
             requests_found = self.get_all_network_requests()
             for req in requests_found:
                 if "php" in req['url']:
@@ -32,7 +33,6 @@ class GetHTMLFile:
                     print('')
                     event_php_file = requests.get(req['url'])
                     file = event_php_file.text
-                    i2 += 1
             i1 += 1
         return file
     def get_all_network_requests(self):
