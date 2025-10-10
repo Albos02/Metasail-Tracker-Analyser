@@ -639,27 +639,21 @@
                 raceDiv.className = 'race-item';
                 const statusIcon = race.has_combined ? '✓' : '⚠';
                 raceDiv.innerHTML = `
-                    <span>${statusIcon} ${race.name}</span>
+                    <span>${statusIcon} ${race.race_title} (${race.id})</span>
                     <span class="item-badge">${race.num_files} files</span>
                 `;
-                raceDiv.onclick = () => loadRace(event, race.name, rIdx);
+                raceDiv.onclick = () => loadRace(event, race.race_title, race.name, race.race_id, race.id, rIdx);
                 raceList.appendChild(raceDiv);
             });
             eventList.appendChild(raceList);
         }
 
-        async function loadRace(event, raceName, raceIdx) {
+        async function loadRace(event, raceTitle, raceName, raceId, Id, raceIdx) {
             showLoading();
             selectedRace = raceName;
             
             try {
-                console.log('Loading race:', raceName, 'from event:', event);
-                
-                // Extract race ID from the race name (e.g., "Race 1 (race_12345)" -> "race_12345")
-                const match = raceName.match(/\(([^)]+)\)/);
-                const raceId = match ? match[1] : null;
-                
-                console.log('Extracted race ID:', raceId);
+                console.log('Loading race:', raceTitle, '(', Id, ')', 'from event:', event);
                 
                 if (!raceId) {
                     throw new Error(`Failed to extract race ID from race name: ${raceName}`);
