@@ -951,23 +951,61 @@
             document.getElementById('legend-items').innerHTML = legendHTML;
             updateStats();
             addRaceCommLine();
+            addFinishLine();
         }
 
         function addRaceCommLine() {
-            // Find all marks that include 'RACE COMM' in their name
+            const raceCommLine = L.polyline([], {
+                color: '#FFFFFF',
+                weight: 3,
+                opacity: 0.8,
+                dashArray: '5, 5'
+            }).addTo(map);
+            
             const raceCommMarks = Object.keys(markers).filter(id => markers[id].isMark && markers[id].displayName.toUpperCase().includes('RACE COMM'));
             
             if (raceCommMarks.length === 2) {
-                const pos1 = markers[raceCommMarks[0]].getLatLng();
-                const pos2 = markers[raceCommMarks[1]].getLatLng();
-                
-                L.polyline([pos1, pos2], {
-                    color: '#FFFFFF',
-                    weight: 3,
-                    opacity: 0.8,
-                    dashArray: '5, 5'
-                }).addTo(map);
-            }
+                    const pos1 = markers[raceCommMarks[0]].getLatLng();
+                    const pos2 = markers[raceCommMarks[1]].getLatLng();
+                    
+                    raceCommLine.setLatLngs([pos1, pos2]);
+                    
+                    const updateRaceCommLinePosition = () => {
+                        const pos1 = markers[raceCommMarks[0]].getLatLng();
+                        const pos2 = markers[raceCommMarks[1]].getLatLng();
+                        raceCommLine.setLatLngs([pos1, pos2]);
+                        requestAnimationFrame(updateRaceCommLinePosition);
+                    };
+                    
+                    requestAnimationFrame(updateRaceCommLinePosition);
+                }
+        }
+
+        function addFinishLine() {
+            const raceCommLine = L.polyline([], {
+                color: '#FFFFFF',
+                weight: 3,
+                opacity: 0.8,
+                dashArray: '5, 5'
+            }).addTo(map);
+            
+            const finishLineMarks = Object.keys(markers).filter(id => markers[id].isMark && markers[id].displayName.toUpperCase().includes('FINISH'));
+            
+            if (finishLineMarks.length === 2) {
+                    const pos1 = markers[finishLineMarks[0]].getLatLng();
+                    const pos2 = markers[finishLineMarks[1]].getLatLng();
+                    
+                    raceCommLine.setLatLngs([pos1, pos2]);
+                    
+                    const updateFinishLinePosition = () => {
+                        const pos1 = markers[finishLineMarks[0]].getLatLng();
+                        const pos2 = markers[finishLineMarks[1]].getLatLng();
+                        raceCommLine.setLatLngs([pos1, pos2]);
+                        requestAnimationFrame(updateFinishLinePosition);
+                    };
+                    
+                    requestAnimationFrame(updateFinishLinePosition);
+                }
         }
 
         function updateBoatPositions(time) {
