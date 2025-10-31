@@ -540,20 +540,20 @@
             <button class="btn" onclick="restart()">⟲ Restart</button>
             <button class="btn" onclick="skipBackward()">⏪ -10s</button>
             <button class="btn" onclick="skipForward()">⏩ +10s</button>
-             <div class="speed-control">
-                 <label>Speed:</label>
-                 <select id="speedSelect" onchange="changeSpeed()">
-                     <option value="0.1" selected>0.1x</option>
-                     <option value="0.25">0.25x</option>
-                     <option value="0.5">0.5x</option>
-                     <option value="1">1x</option>
-                     <option value="2">2x</option>
-                     <option value="5">5x</option>
-                     <option value="10">10x</option>
-                     <option value="20">20x</option>
-                     <option value="50">50x</option>
-                 </select>
-             </div>
+              <div class="speed-control">
+                  <label>Speed:</label>
+                  <select id="speedSelect" onchange="changeSpeed()">
+                      <option value="0.1" selected>0.1x</option>
+                      <option value="0.25">0.25x</option>
+                      <option value="0.5">0.5x</option>
+                      <option value="1">1x</option>
+                      <option value="2">2x</option>
+                      <option value="5">5x</option>
+                      <option value="10">10x</option>
+                      <option value="20">20x</option>
+                      <option value="50">50x</option>
+                  </select>
+              </div>
             <div class="filter-control">
                 <label>View:</label>
                 <select id="viewSelect" onchange="changeView()">
@@ -640,27 +640,21 @@
                 raceDiv.className = 'race-item';
                 const statusIcon = race.has_combined ? '✓' : '⚠';
                 raceDiv.innerHTML = `
-                    <span>${statusIcon} ${race.name}</span>
+                    <span>${statusIcon} ${race.name} (${race.id})</span>
                     <span class="item-badge">${race.num_files} files</span>
                 `;
-                raceDiv.onclick = () => loadRace(event, race.name, rIdx);
+                raceDiv.onclick = () => loadRace(event, race.name, race.name, race.id, race.id, rIdx);
                 raceList.appendChild(raceDiv);
             });
             eventList.appendChild(raceList);
         }
 
-        async function loadRace(event, raceName, raceIdx) {
+        async function loadRace(event, raceTitle, raceName, raceId, Id, raceIdx) {
             showLoading();
             selectedRace = raceName;
             
             try {
-                console.log('Loading race:', raceName, 'from event:', event);
-                
-                // Extract race ID from the race name (e.g., "Race 1 (race_12345)" -> "race_12345")
-                const match = raceName.match(/\(([^)]+)\)/);
-                const raceId = match ? match[1] : null;
-                
-                console.log('Extracted race ID:', raceId);
+                console.log('Loading race:', raceTitle, '(', Id, ')', 'from event:', event);
                 
                 if (!raceId) {
                     throw new Error(`Failed to extract race ID from race name: ${raceName}`);
@@ -957,6 +951,8 @@
             
             document.getElementById('legend-items').innerHTML = legendHTML;
             updateStats();
+            addRaceCommLine();
+            addFinishLine();
         }
 
         function addRaceCommLine() {
@@ -974,6 +970,33 @@
                     dashArray: '5, 5'
                 }).addTo(map);
             }
+        }
+
+        function addFinishLine() {
+            const raceCommLine = L.polyline([], {
+                color: '#FFFFFF',
+                weight: 3,
+                opacity: 0.8,
+                dashArray: '5, 5'
+            }).addTo(map);
+            
+            const finishLineMarks = Object.keys(markers).filter(id => markers[id].isMark && markers[id].displayName.toUpperCase().includes('FINISH'));
+            
+            if (finishLineMarks.length === 2) {
+                    const pos1 = markers[finishLineMarks[0]].getLatLng();
+                    const pos2 = markers[finishLineMarks[1]].getLatLng();
+                    
+                    raceCommLine.setLatLngs([pos1, pos2]);
+                    
+                    const updateFinishLinePosition = () => {
+                        const pos1 = markers[finishLineMarks[0]].getLatLng();
+                        const pos2 = markers[finishLineMarks[1]].getLatLng();
+                        raceCommLine.setLatLngs([pos1, pos2]);
+                        requestAnimationFrame(updateFinishLinePosition);
+                    };
+                    
+                    requestAnimationFrame(updateFinishLinePosition);
+                }
         }
 
         function updateBoatPositions(time) {
@@ -1029,7 +1052,7 @@
                                         <circle cx="0" cy="0" r="10" fill="${color}" stroke="white" stroke-width="2.5"/>
                                         <circle cx="0" cy="0" r="4" fill="white"/>
                                     </g>
-                                  </svg>`,
+                                   </svg>`,
                             iconSize: [32, 32],
                             iconAnchor: [16, 16]
                         });
@@ -1042,7 +1065,7 @@
                                         <path d="M0,-14 L-5,10 L0,7 L5,10 Z" fill="${color}" stroke="white" stroke-width="2.5"/>
                                         <circle cx="0" cy="0" r="2" fill="white"/>
                                     </g>
-                                  </svg>`,
+                                   </svg>`,
                             iconSize: [32, 32],
                             iconAnchor: [16, 16]
                         });
