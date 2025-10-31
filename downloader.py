@@ -367,3 +367,87 @@ if __name__ == "__main__":
     zip_extractor = ZipExtractor(event_directory)
     zip_extractor.extract_all_zips()
     zip_extractor.remove_zip_files()
+
+def generate_index():
+    """Generate index.json file listing all events and races"""
+    events_dir = 'events'
+    index = []
+
+    if not os.path.exists(events_dir):
+        print(f"Error: {events_dir} directory not found")
+        return
+
+    # Iterate through event folders
+    for event_folder in os.listdir(events_dir):
+        event_path = os.path.join(events_dir, event_folder)
+
+        if not os.path.isdir(event_path):
+            continue
+
+        event_data = {
+            'name': event_folder.replace('_', ' ').title(),
+            'folder': event_folder,
+            'races': []
+        }
+
+        # Iterate through race folders
+        for race_folder in os.listdir(event_path):
+            race_path = os.path.join(event_path, race_folder)
+
+            if not os.path.isdir(race_path) or not race_folder.startswith('race_'):
+                continue
+
+            # Check if combined_data.csv exists
+            combined_file = os.path.join(race_path, 'combined_data.csv')
+
+            # Extract race ID
+            race_id = race_folder  # e.g., "race_12345"
+            race_number = race_folder.split('_')[1] if '_' in race_folder else race_folder
+
+            # Count data files
+            data_files = [f for f in os.listdir(race_path) if f.isdigit()]
+            num_files = len(data_files)
+
+            # Check for boat names and race path files
+            boats_file = os.path.join(race_path, f'boats_dict_{race_number}.json')
+            race_path_file = os.path.join(race_path, f'race_path_{race_number}.json')
+
+            has_boats = os.path.exists(boats_file)
+            has_race_path = os.path.exists(race_path_file)
+
+            race_info = {
+                'name': f'Race {race_number} ({race_id})',
+                'id': race_id,
+                'num_files': num_files,
+                'has_combined': os.path.exists(combined_file),
+                'has_boats': has_boats,
+                'has_race_path': has_race_path
+            }
+
+            event_data['races'].append(race_info)
+
+        # Sort races by race number
+        event_data['races'].sort(key=lambda x: x['name'])
+
+        if event_data['races']:  # Only add events that have races
+            index.append(event_data)
+
+    # Sort events by name
+    index.sort(key=lambda x: x['name'])
+
+    # Save index.json
+    output_file = os.path.join(events_dir, 'index.json')
+    with open(output_file, 'w') as f:
+        json.dump(index, f, indent=2)
+
+    print(f"Generated {output_file}")
+    print(f"Found {len(index)} events with {sum(len(e['races']) for e in index)} races total")
+
+    # Print summary
+    for event in index:
+        print(f"\n{event['name']} ({event['folder']})")
+        for race in event['races']:
+            status = "✓" if race['has_combined'] else "✗"
+            print(f"  {status} {race['name']} - {race['num_files']} files")
+
+generate_index()
