@@ -499,7 +499,7 @@
     </div>
 
     <div class="overlay-panel legend" id="legend" style="display: none;">
-        <h3>🚤 Boats & Markers</h3>
+        <h3>⛵ Boats</h3>
         <div class="heatmap-toggle" onclick="toggleHeatmap()">
             <div class="toggle-switch" id="heatmapToggle">
                 <div class="toggle-slider"></div>
@@ -540,19 +540,20 @@
             <button class="btn" onclick="restart()">⟲ Restart</button>
             <button class="btn" onclick="skipBackward()">⏪ -10s</button>
             <button class="btn" onclick="skipForward()">⏩ +10s</button>
-            <div class="speed-control">
-                <label>Speed:</label>
-                <select id="speedSelect" onchange="changeSpeed()">
-                    <option value="0.25">0.25x</option>
-                    <option value="0.5">0.5x</option>
-                    <option value="1" selected>1x</option>
-                    <option value="2">2x</option>
-                    <option value="5">5x</option>
-                    <option value="10">10x</option>
-                    <option value="20">20x</option>
-                    <option value="50">50x</option>
-                </select>
-            </div>
+             <div class="speed-control">
+                 <label>Speed:</label>
+                 <select id="speedSelect" onchange="changeSpeed()">
+                     <option value="0.1" selected>0.1x</option>
+                     <option value="0.25">0.25x</option>
+                     <option value="0.5">0.5x</option>
+                     <option value="1">1x</option>
+                     <option value="2">2x</option>
+                     <option value="5">5x</option>
+                     <option value="10">10x</option>
+                     <option value="20">20x</option>
+                     <option value="50">50x</option>
+                 </select>
+             </div>
             <div class="filter-control">
                 <label>View:</label>
                 <select id="viewSelect" onchange="changeView()">
@@ -875,21 +876,27 @@
             Object.keys(traces).forEach((trackerID, idx) => {
                 const color = colors[idx % colors.length];
                 const points = traces[trackerID];
-                
+
                 // Get boat name from loaded data
                 const fullTracker = 'A' + String(trackerID).padStart(4, '0');
                 let displayName = `Boat ${trackerID}`;
                 let isMark = false;
-                
+
                 if (boatNames[fullTracker]) {
                     displayName = boatNames[fullTracker];
                 } else if (raceMarks[fullTracker]) {
                     displayName = `Mark: ${raceMarks[fullTracker][0]}`;
                     isMark = true;
                 }
-                
+
+                // If displayName is "Boat X", treat as mark
+                if (displayName.match(/^Boat \d+$/)) {
+                    displayName = `no name Mark ${trackerID}`;
+                    isMark = true;
+                }
+
                 const coords = points.map(p => [p.lat, p.lon]);
-                
+
                 // Use dashed line for marks, solid for boats
                 polylines[trackerID] = L.polyline(coords, {
                     color: color,
@@ -897,7 +904,7 @@
                     opacity: showTraces ? 0.6 : 0,
                     dashArray: isMark ? '10, 10' : null
                 }).addTo(map);
-                
+
                 // Different icon for marks vs boats
                 let iconHTML;
                 if (isMark) {
@@ -915,42 +922,41 @@
                                     </g>
                                 </svg>`;
                 }
-                
+
                 const boatIcon = L.divIcon({
                     className: 'boat-icon',
                     html: iconHTML,
                     iconSize: [32, 32],
                     iconAnchor: [16, 16]
                 });
-                
+
                 markers[trackerID] = L.marker([points[0].lat, points[0].lon], {
                     icon: boatIcon
                 }).addTo(map);
-                
+
                 markers[trackerID].bindPopup(`<b>${displayName}</b><br>Speed: 0 kts<br>Heading: 0°`);
-                
-                // Store if it's a mark for later use
+
                 markers[trackerID].isMark = isMark;
                 markers[trackerID].displayName = displayName;
-                
-                const avgSpeed = (points.reduce((sum, p) => sum + p.speed, 0) / points.length).toFixed(1);
-                const maxSpeed = Math.max(...points.map(p => p.speed)).toFixed(1);
-                
-                const iconSymbol = isMark ? '📍' : '⛵';
-                legendHTML += `
-                    <div class="legend-item" onclick="toggleBoat(${trackerID})">
-                        <div class="legend-color" style="background: ${color}"></div>
-                        <div class="legend-details">
-                            <div class="legend-name">${iconSymbol} ${displayName}</div>
-                            <div class="legend-stats">${isMark ? 'Race Mark' : `Avg: ${avgSpeed} kts | Max: ${maxSpeed} kts`}</div>
+
+                if (!isMark) {
+                    const avgSpeed = (points.reduce((sum, p) => sum + p.speed, 0) / points.length).toFixed(1);
+                    const maxSpeed = Math.max(...points.map(p => p.speed)).toFixed(1);
+
+                    legendHTML += `
+                        <div class="legend-item" onclick="toggleBoat(${trackerID})">
+                            <div class="legend-color" style="background: ${color}"></div>
+                            <div class="legend-details">
+                                <div class="legend-name">⛵ ${displayName}</div>
+                                <div class="legend-stats">Avg: ${avgSpeed} kts | Max: ${maxSpeed} kts</div>
+                            </div>
                         </div>
-                    </div>
-                `;
+                    `;
+                }
             });
             
             document.getElementById('legend-items').innerHTML = legendHTML;
             updateStats();
-            addRaceCommLine();
         }
 
         function addRaceCommLine() {
@@ -1075,17 +1081,17 @@
 
         function animate(timestamp) {
             if (!isPlaying) return;
-            
+
             if (!lastUpdateTime) lastUpdateTime = timestamp;
             const deltaTime = timestamp - lastUpdateTime;
             lastUpdateTime = timestamp;
-            
-            currentTime += (deltaTime / 1000) * animationSpeed * 10;
-            
+
+            currentTime += (deltaTime / 1000) * animationSpeed;
+
             if (currentTime > maxTime) {
                 currentTime = minTime;
             }
-            
+
             updateBoatPositions(currentTime);
             animationFrame = requestAnimationFrame(animate);
         }
@@ -1132,7 +1138,7 @@
             hiddenBoats.clear();
             
             if (view === 'top5' || view === 'leader') {
-                const boatSpeeds = Object.keys(traces).map(id => {
+                const boatSpeeds = Object.keys(traces).filter(id => !markers[id].isMark).map(id => {
                     const avgSpeed = traces[id].reduce((sum, p) => sum + p.speed, 0) / traces[id].length;
                     return { id, avgSpeed };
                 }).sort((a, b) => b.avgSpeed - a.avgSpeed);
@@ -1159,9 +1165,10 @@
         }
 
         function updateLegendDisplay() {
+            const boatIds = Object.keys(traces).filter(id => !markers[id].isMark);
             const items = document.querySelectorAll('.legend-item');
             items.forEach((item, idx) => {
-                const trackerID = Object.keys(traces)[idx];
+                const trackerID = boatIds[idx];
                 if (hiddenBoats.has(trackerID)) {
                     item.classList.add('hidden');
                 } else {
@@ -1210,7 +1217,7 @@
         }
 
         function updateStats() {
-            const visibleBoats = Object.keys(traces).filter(id => !hiddenBoats.has(id));
+            const visibleBoats = Object.keys(traces).filter(id => !hiddenBoats.has(id) && !markers[id].isMark);
             const allPoints = visibleBoats.flatMap(id => traces[id]);
             
             if (allPoints.length === 0) return;
@@ -1269,9 +1276,10 @@
         }
 
         function updateRaceInfo() {
+            const boatCount = Object.keys(traces).filter(id => !markers[id].isMark).length;
             const duration = new Date((maxTime - minTime) * 1000).toISOString().substr(11, 8);
-            document.getElementById('raceInfo').textContent = 
-                `${Object.keys(traces).length} boats | Duration: ${duration}`;
+            document.getElementById('raceInfo').textContent =
+                `${boatCount} boats | Duration: ${duration}`;
         }
 
         function updateTimeMarkers() {
