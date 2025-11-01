@@ -349,7 +349,11 @@ if __name__ == "__main__":
                 'start_time': race['start_time'],
                 'category': race['category'],
                 'order': race['order'],
-                'session_id': session_id
+                'session_id': session_id,
+                'event_name': data['event_name'],
+                'event_location': data['location'],
+                'event_dates': data['dates'],
+                'event_full_title': data['full_title']
             }
             with open(f"{event_directory}/race_data_{race['export_id']}.json", 'w') as f:
                 json.dump(race_data, f, indent=2)
@@ -411,13 +415,28 @@ def generate_index():
             # Check for boat names and race path files
             boats_file = os.path.join(race_path, f'boats_dict_{race_number}.json')
             race_path_file = os.path.join(race_path, f'race_path_{race_number}.json')
+            race_data_file = os.path.join(race_path, f'race_data_{race_number}.json')
 
             has_boats = os.path.exists(boats_file)
             has_race_path = os.path.exists(race_path_file)
 
+            # Load title and start_time from race_data file
+            title = ''
+            start_time = ''
+            if os.path.exists(race_data_file):
+                try:
+                    with open(race_data_file, 'r') as f:
+                        race_data = json.load(f)
+                        title = race_data.get('title', '')
+                        start_time = race_data.get('start_time', '')
+                except (json.JSONDecodeError, KeyError):
+                    pass
+
             race_info = {
                 'name': f'Race {race_number} ({race_id})',
                 'id': race_id,
+                'title': title,
+                'start_time': start_time,
                 'num_files': num_files,
                 'has_combined': os.path.exists(combined_file),
                 'has_boats': has_boats,
