@@ -633,20 +633,107 @@
                 <h3 style="margin-bottom: 12px; color: #64B5F6;">${event.name}</h3>
             `;
 
-            const raceList = document.createElement('div');
-            raceList.className = 'race-list';
+            // Group races by day
+            const racesByDay = {};
             event.races.forEach((race, rIdx) => {
-                const raceDiv = document.createElement('div');
-                raceDiv.className = 'race-item';
-                const statusIcon = race.has_combined ? '✓' : '⚠';
-                raceDiv.innerHTML = `
-                    <span>${statusIcon} ${race.name} (${race.id})</span>
-                    <span class="item-badge">${race.num_files} files</span>
-                `;
-                raceDiv.onclick = () => loadRace(event, race.name, race.name, race.id, race.id, rIdx);
-                raceList.appendChild(raceDiv);
+                let dayKey = 'Unknown';
+                if (race.start_time) {
+                    try {
+                        const date = new Date(race.start_time);
+                        dayKey = date.toISOString().split('T')[0]; // YYYY-MM-DD
+                    } catch (e) {
+                        console.warn('Invalid start_time for race:', race.id, race.start_time);
+                    }
+                }
+                if (!racesByDay[dayKey]) racesByDay[dayKey] = [];
+                racesByDay[dayKey].push(race);
             });
-            eventList.appendChild(raceList);
+
+            // Sort days
+            const sortedDays = Object.keys(racesByDay).filter(d => d !== 'Unknown').sort((a, b) => new Date(a) - new Date(b));
+            const unknownRaces = racesByDay['Unknown'] || [];
+
+            let dayCounter = 1;
+            if (sortedDays.length > 0) {
+                const minDay = sortedDays[0];
+                const maxDay = sortedDays[sortedDays.length - 1];
+
+                // Generate all days from min to max
+                const allDays = [];
+                let currentDay = new Date(minDay);
+                const endDay = new Date(maxDay);
+                while (currentDay <= endDay) {
+                    allDays.push(currentDay.toISOString().split('T')[0]);
+                    currentDay.setDate(currentDay.getDate() + 1);
+                }
+
+                allDays.forEach(dayKey => {
+                    const dayRaces = racesByDay[dayKey] || [];
+
+                    // Sort races within day by start_time or title
+                    dayRaces.sort((a, b) => {
+                        if (a.start_time && b.start_time) {
+                            return new Date(a.start_time) - new Date(b.start_time);
+                        }
+                        return (a.title || a.name).localeCompare(b.title || b.name);
+                    });
+
+                    // Add day heading
+                    const dayHeading = document.createElement('h4');
+                    dayHeading.style.cssText = 'margin: 20px 0 10px 0; color: #90CAF9; font-size: 16px; font-weight: 600;';
+                    const date = new Date(dayKey);
+                    const formattedDate = date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                    dayHeading.textContent = `Day ${dayCounter} - ${formattedDate}`;
+                    eventList.appendChild(dayHeading);
+                    dayCounter++;
+
+                    if (dayRaces.length > 0) {
+                        // Add races for this day
+                        const raceList = document.createElement('div');
+                        raceList.className = 'race-list';
+                        dayRaces.forEach((race, rIdx) => {
+                            const raceDiv = document.createElement('div');
+                            raceDiv.className = 'race-item';
+                            raceDiv.innerHTML = `
+                                <span>${race.title || 'Race ' + race.id.split('_')[1]} (${race.id})</span>
+                                <span class="item-badge">${race.num_files} files</span>
+                            `;
+                            raceDiv.onclick = () => loadRace(event, race.name, race.name, race.id, race.id, rIdx);
+                            raceList.appendChild(raceDiv);
+                        });
+                        eventList.appendChild(raceList);
+                    } else {
+                        // No races on this day
+                        const noRacesDiv = document.createElement('div');
+                        noRacesDiv.style.cssText = 'margin: 10px 0; padding: 12px 16px; background: rgba(100, 181, 246, 0.1); border-radius: 10px; color: #90CAF9; font-style: italic;';
+                        noRacesDiv.textContent = 'No races on this day';
+                        eventList.appendChild(noRacesDiv);
+                    }
+                });
+            }
+
+            // Handle unknown dates
+            if (unknownRaces.length > 0) {
+                const dayHeading = document.createElement('h4');
+                dayHeading.style.cssText = 'margin: 20px 0 10px 0; color: #90CAF9; font-size: 16px; font-weight: 600;';
+                dayHeading.textContent = 'Unknown Date';
+                eventList.appendChild(dayHeading);
+
+                const raceList = document.createElement('div');
+                raceList.className = 'race-list';
+                unknownRaces.forEach((race, rIdx) => {
+                    const raceDiv = document.createElement('div');
+                    raceDiv.className = 'race-item';
+                    const statusIcon = race.has_combined ? '✓' : '⚠';
+                    raceDiv.innerHTML = `
+                        <span>${statusIcon} ${race.title || 'Race ' + race.id.split('_')[1]} (${race.id})</span>
+                        <span class="item-badge">${race.num_files} files</span>
+                    `;
+                    raceDiv.onclick = () => loadRace(event, race.name, race.name, race.id, race.id, rIdx);
+                    raceList.appendChild(raceDiv);
+                });
+                eventList.appendChild(raceList);
+            }
         }
 
         async function loadRace(event, raceTitle, raceName, raceId, Id, raceIdx) {
