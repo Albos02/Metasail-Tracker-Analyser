@@ -244,6 +244,13 @@
             font-weight: 600;
         }
 
+        select option {
+            background: rgba(100, 181, 246, 0.2);
+            background: rgba(15, 20, 40, 0.95);
+
+            color: white;
+        }
+
         .legend {
             position: absolute;
             top: 20px;
@@ -542,17 +549,17 @@
             <button class="btn" onclick="skipForward()">⏩ +10s</button>
               <div class="speed-control">
                   <label>Speed:</label>
-                  <select id="speedSelect" onchange="changeSpeed()">
-                      <option value="0.1" selected>0.1x</option>
-                      <option value="0.25">0.25x</option>
-                      <option value="0.5">0.5x</option>
-                      <option value="1">1x</option>
-                      <option value="2">2x</option>
-                      <option value="5">5x</option>
-                      <option value="10">10x</option>
-                      <option value="20">20x</option>
-                      <option value="50">50x</option>
-                  </select>
+                   <select id="speedSelect" onchange="changeSpeed()">
+                       <option value="0.1">0.1x</option>
+                       <option value="0.25">0.25x</option>
+                       <option value="0.5">0.5x</option>
+                       <option value="1" selected>1x</option>
+                       <option value="2">2x</option>
+                       <option value="5">5x</option>
+                       <option value="10">10x</option>
+                       <option value="20">20x</option>
+                       <option value="50">50x</option>
+                   </select>
               </div>
             <div class="filter-control">
                 <label>View:</label>
