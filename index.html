@@ -258,7 +258,7 @@
             padding: 20px;
             max-height: 70vh;
             overflow-y: auto;
-            min-width: 280px;
+            min-width: 320px;
         }
 
         .legend h3 {
@@ -288,6 +288,15 @@
 
         .legend-item.hidden {
             opacity: 0.4;
+        }
+
+        .legend-rank {
+            font-size: 18px;
+            font-weight: bold;
+            color: #64B5F6;
+            margin-right: 10px;
+            min-width: 30px;
+            text-align: center;
         }
 
         .legend-color {
@@ -1058,9 +1067,62 @@
             });
             
             document.getElementById('legend-items').innerHTML = legendHTML;
+            updateLegendDisplay(); // Update to show live standings
             updateStats();
             addRaceCommLine();
             addFinishLine();
+        }
+
+        function updateLegend() {
+            const visibleBoats = Object.keys(traces).filter(id => !hiddenBoats.has(id) && !markers[id].isMark);
+            if (visibleBoats.length === 0) return;
+
+            // Get current ranks
+            const boatStandings = visibleBoats.map(trackerID => {
+                // Find current point
+                const points = traces[trackerID];
+                let currentPoint = points[0];
+                for (let i = 0; i < points.length - 1; i++) {
+                    if (points[i].timestamp <= currentTime && points[i + 1].timestamp >= currentTime) {
+                        if (points[i + 1].timestamp !== points[i].timestamp) {
+                            const progress = (currentTime - points[i].timestamp) / (points[i + 1].timestamp - points[i].timestamp);
+                            // For rank, use the point's rank
+                            currentPoint = points[i];
+                        } else {
+                            currentPoint = points[i];
+                        }
+                        break;
+                    } else if (points[i].timestamp <= currentTime) {
+                        currentPoint = points[i];
+                    }
+                }
+                return {
+                    trackerID: parseInt(trackerID),
+                    rank: currentPoint.rank || 999,
+                    displayName: markers[trackerID].displayName,
+                    avgSpeed: (points.reduce((sum, p) => sum + p.speed, 0) / points.length).toFixed(1),
+                    maxSpeed: Math.max(...points.map(p => p.speed)).toFixed(1)
+                };
+            });
+
+            // Sort by rank
+            boatStandings.sort((a, b) => a.rank - b.rank);
+
+            let legendHTML = '';
+            boatStandings.forEach((boat, idx) => {
+                const color = colors[boat.trackerID % colors.length]; // Keep color per trackerID
+                legendHTML += `
+                    <div class="legend-item ${hiddenBoats.has(boat.trackerID) ? 'hidden' : ''}" onclick="toggleBoat(${boat.trackerID})">
+                        <div class="legend-color" style="background: ${color}"></div>
+                        <div class="legend-details">
+                            <div class="legend-name">⛵ ${boat.displayName} (Rank ${boat.rank})</div>
+                            <div class="legend-stats">Avg: ${boat.avgSpeed} kts | Max: ${boat.maxSpeed} kts</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('legend-items').innerHTML = legendHTML;
         }
 
         function addRaceCommLine() {
@@ -1200,13 +1262,17 @@
                         totalDistance += getDistance(allPoints[i - 1], allPoints[i]);
                     }
                     
+                    const twa = point.windDirection ? Math.abs((((point.heading - point.windDirection) % 180))) : null;
+                     // TODO fix 2nd way for twa
+                     // const twa = point.windDirection ? Math.abs((((point.heading - point.windDirection -180) % 360))) : null;
                     markers[trackerID].bindPopup(
                         `<b>${markers[trackerID].displayName}</b><br>` +
                         `Speed: ${point.speed.toFixed(1)} kts<br>` +
                         `Heading: ${point.heading.toFixed(0)}°<br>` +
                         `Rank: ${point.rank || 'N/A'}<br>` +
                         `Wind State: ${point.windState || 'N/A'}<br>` +
-                        `Wind Direction: ${point.windDirection ? point.windDirection.toFixed(0) : 'N/A'}°<br>` +
+                        `TWD: ${point.windDirection ? point.windDirection.toFixed(0) : 'N/A'}°<br>` +
+                        `TWA: ${twa !== null ? twa.toFixed(0) : 'N/A'}°<br>` +
                         `VMC: ${point.vmc ? point.vmc.toFixed(1) : 'N/A'} kts<br>` +
                         `VMG: ${point.vmg ? point.vmg.toFixed(1) : 'N/A'} kts<br>` +
                         `<br><b>Personal Stats:</b><br>` +
@@ -1222,8 +1288,9 @@
             
             const progress = ((time - minTime) / (maxTime - minTime)) * 100;
             document.getElementById('timelineSlider').value = progress;
-            
+
             updateStats();
+            updateLegendDisplay();
         }
 
         function animate(timestamp) {
@@ -1312,16 +1379,52 @@
         }
 
         function updateLegendDisplay() {
-            const boatIds = Object.keys(traces).filter(id => !markers[id].isMark);
-            const items = document.querySelectorAll('.legend-item');
-            items.forEach((item, idx) => {
-                const trackerID = boatIds[idx];
-                if (hiddenBoats.has(trackerID)) {
-                    item.classList.add('hidden');
-                } else {
-                    item.classList.remove('hidden');
+            const boatIds = Object.keys(traces).filter(id => !markers[id].isMark && !hiddenBoats.has(id));
+
+            // Get current standings
+            const standings = boatIds.map(id => {
+                const points = traces[id];
+                let currentPoint = points[0];
+                for (let i = 0; i < points.length - 1; i++) {
+                    if (points[i].timestamp <= currentTime && points[i + 1].timestamp >= currentTime) {
+                        currentPoint = points[i];
+                        break;
+                    } else if (points[i].timestamp <= currentTime) {
+                        currentPoint = points[i];
+                    }
                 }
+                return {
+                    id: id,
+                    rank: currentPoint.rank || 999,
+                    speed: currentPoint.speed || 0,
+                    displayName: markers[id].displayName
+                };
+            }).sort((a, b) => {
+                const rankA = a.rank === -1 ? 999 : a.rank;
+                const rankB = b.rank === -1 ? 999 : b.rank;
+                return rankA - rankB;
             });
+
+            // Rebuild legend HTML
+            let legendHTML = '';
+            standings.forEach(boat => {
+                const color = colors[parseInt(boat.id) % colors.length];
+                const rankDisplay = boat.rank === -1 ? 'list' : boat.rank;
+                const avgSpeed = (traces[boat.id].reduce((sum, p) => sum + p.speed, 0) / traces[boat.id].length).toFixed(1);
+                const maxSpeed = Math.max(...traces[boat.id].map(p => p.speed)).toFixed(1);
+                legendHTML += `
+                    <div class="legend-item" onclick="toggleBoat(${boat.id})">
+                        <div class="legend-rank">${rankDisplay}</div>
+                        <div class="legend-color" style="background: ${color}"></div>
+                        <div class="legend-details">
+                            <div class="legend-name">⛵ ${boat.displayName}</div>
+                            <div class="legend-stats">Avg: ${avgSpeed} kts | Max: ${maxSpeed} kts</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('legend-items').innerHTML = legendHTML;
         }
 
         function toggleTraces() {
