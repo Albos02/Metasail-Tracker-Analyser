@@ -907,6 +907,7 @@
         }
 
         function parseGPSData(content) {
+            // boat_id|timestamp_seconds|longitude|latitude|rank_comp|time_from_first_comp|heading_degrees|speed_string|rank|distance_to_first_m|wind_state|wind_direction_deg|sloperankline|end_time_diff_seconds|begin_datetime|crt_race_segment|apply_wind|vmc_knots|vmg_knots
             const data = content.split('A').filter(x => x.trim());
             traces = {};
             
@@ -921,17 +922,30 @@
                 const heading = parseFloat(fields[6]) || 0;
                 const speedStr = fields[7];
                 const speed = parseFloat(speedStr.replace(' kn', '')) || 0;
-                
+                const rank = parseInt(fields[8]) || 0;
+                const windState = parseInt(fields[10]) || 0;
+                const windDirection = parseInt(fields[11]) || 0;
+                const applyWind = parseInt(fields[16]) || 0;
+                const vmc = parseFloat(fields[17]) || 0;
+                const vmg = parseFloat(fields[18]) || 0;
+
+
                 if (!traces[trackerID]) {
                     traces[trackerID] = [];
                 }
-                
+
                 traces[trackerID].push({
                     timestamp: timestamp,
                     lat: lat,
                     lon: lon,
                     heading: heading,
-                    speed: speed
+                    speed: speed,
+                    rank: rank,
+                    windState: windState,
+                    windDirection: windDirection,
+                    applyWind: applyWind,
+                    vmc: vmc,
+                    vmg: vmg
                 });
             });
             
@@ -1126,8 +1140,19 @@
                     const lon = point.lon + (nextPoint.lon - point.lon) * progress;
                     const heading = point.heading + (nextPoint.heading - point.heading) * progress;
                     const speed = point.speed + (nextPoint.speed - point.speed) * progress;
-                    
-                    point = { lat, lon, heading, speed, timestamp: time };
+                    const vmc = point.vmc + (nextPoint.vmc - point.vmc) * progress;
+                    const vmg = point.vmg + (nextPoint.vmg - point.vmg) * progress;
+                    const windDirection = point.windDirection + (nextPoint.windDirection - point.windDirection) * progress;
+
+                    point = {
+                        lat, lon, heading, speed, timestamp: time,
+                        rank: point.rank, // Use current segment's rank
+                        windState: point.windState,
+                        windDirection,
+                        applyWind: point.applyWind,
+                        vmc,
+                        vmg
+                    };
                 }
                 
                 positions.push({ trackerID, point, color });
@@ -1179,6 +1204,11 @@
                         `<b>${markers[trackerID].displayName}</b><br>` +
                         `Speed: ${point.speed.toFixed(1)} kts<br>` +
                         `Heading: ${point.heading.toFixed(0)}°<br>` +
+                        `Rank: ${point.rank || 'N/A'}<br>` +
+                        `Wind State: ${point.windState || 'N/A'}<br>` +
+                        `Wind Direction: ${point.windDirection ? point.windDirection.toFixed(0) : 'N/A'}°<br>` +
+                        `VMC: ${point.vmc ? point.vmc.toFixed(1) : 'N/A'} kts<br>` +
+                        `VMG: ${point.vmg ? point.vmg.toFixed(1) : 'N/A'} kts<br>` +
                         `<br><b>Personal Stats:</b><br>` +
                         `Avg Speed: ${avgSpeed} kts<br>` +
                         `Max Speed: ${maxSpeed} kts<br>` +
