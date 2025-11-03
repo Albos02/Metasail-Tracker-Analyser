@@ -679,6 +679,72 @@
         .settings-item:last-child {
             border-bottom: none;
         }
+
+        .tail-control {
+            opacity: 0.5;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .tail-control.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .settings-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .tail-slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: linear-gradient(to right, #1565C0, #42A5F5);
+            outline: none;
+            -webkit-appearance: none;
+            margin: 8px 0;
+        }
+
+        .tail-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(100, 181, 246, 0.4);
+            transition: transform 0.2s;
+        }
+
+        .tail-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        .tail-slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 8px rgba(100, 181, 246, 0.4);
+        }
+
+        .tail-value {
+            background: rgba(100, 181, 246, 0.2);
+            color: #64B5F6;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            min-width: 60px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -725,6 +791,14 @@
                     🗺️ Display Options
                 </div>
                 <div class="settings-item">
+                    <div class="trace-toggle" onclick="toggleTraces()">
+                        <div class="toggle-switch active" id="traceToggle">
+                            <div class="toggle-slider"></div>
+                        </div>
+                        <span>Show Traces</span>
+                    </div>
+                </div>
+                <div class="settings-item">
                     <div class="heatmap-toggle" onclick="toggleHeatmap()">
                         <div class="toggle-switch" id="heatmapToggle">
                             <div class="toggle-slider"></div>
@@ -733,11 +807,20 @@
                     </div>
                 </div>
                 <div class="settings-item">
-                    <div class="trace-toggle" onclick="toggleTraces()">
-                        <div class="toggle-switch active" id="traceToggle">
-                            <div class="toggle-slider"></div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                        <div class="trace-toggle" onclick="toggleOnlyTails()" style="margin: 0;">
+                            <div class="toggle-switch" id="onlyTailsToggle">
+                                <div class="toggle-slider"></div>
+                            </div>
+                            <span>Only Show Tails</span>
                         </div>
-                        <span>Show Traces</span>
+                        <div class="tail-control" id="tailControl" style="margin: 0;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 12px; color: #90CAF9;">Duration:</span>
+                                <input type="range" min="5" max="300" value="30" class="tail-slider" id="tailSlider" oninput="updateTailDuration(this.value)" style="width: 120px;">
+                                <span class="tail-value" id="tailValue">30s</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -799,6 +882,28 @@
         let selectedEvent = null;
         let selectedRace = null;
         let selectedBoat = null;
+        let tailDuration = 30; // seconds
+        let tailPolylines = {};
+        let onlyShowTails = false;
+
+        // Load saved settings from localStorage
+        function loadSavedSettings() {
+            const savedDuration = localStorage.getItem('tailDuration');
+            if (savedDuration) {
+                tailDuration = parseInt(savedDuration);
+                document.getElementById('tailSlider').value = tailDuration;
+                document.getElementById('tailValue').textContent = `${tailDuration}s`;
+            }
+            
+            const savedOnlyTails = localStorage.getItem('onlyShowTails');
+            if (savedOnlyTails) {
+                onlyShowTails = savedOnlyTails === 'true';
+                if (onlyShowTails) {
+                    document.getElementById('onlyTailsToggle').classList.add('active');
+                    document.getElementById('tailControl').classList.add('active');
+                }
+            }
+        }
 
         const colors = ['#2196F3', '#F44336', '#4CAF50', '#9C27B0', '#FF9800', '#00BCD4', '#E91E63', '#8BC34A', '#FF5722', '#3F51B5', '#FFC107', '#009688', '#795548', '#607D8B'];
 
@@ -1281,6 +1386,8 @@
             updateStats();
             addRaceCommLine();
             addFinishLine();
+            
+
         }
 
         function updateLegend() {
@@ -1382,6 +1489,12 @@
         function updateBoatPositions(time) {
             const positions = [];
             
+            // Clear existing tail polylines
+            Object.values(tailPolylines).forEach(polyline => {
+                map.removeLayer(polyline);
+            });
+            tailPolylines = {};
+            
             Object.keys(traces).forEach((trackerID, idx) => {
                 if (hiddenBoats.has(trackerID)) {
                     if (markers[trackerID]) {
@@ -1428,6 +1541,31 @@
                 }
                 
                 positions.push({ trackerID, point, color });
+                
+                // Create tail polyline if traces are enabled and this is not a mark
+                if (showTraces && !markers[trackerID].isMark) {
+                    const tailStartTime = time - tailDuration;
+                    const tailPoints = [];
+                    
+                    for (let i = 0; i < points.length; i++) {
+                        if (points[i].timestamp >= tailStartTime && points[i].timestamp <= time) {
+                            tailPoints.push([points[i].lat, points[i].lon]);
+                        }
+                    }
+                    
+                    // Add current interpolated position
+                    if (tailPoints.length > 0) {
+                        tailPoints.push([point.lat, point.lon]);
+                    }
+                    
+                    if (tailPoints.length > 1) {
+                        tailPolylines[trackerID] = L.polyline(tailPoints, {
+                            color: color,
+                            weight: 3,
+                            opacity: onlyShowTails ? 0.9 : 0.8
+                        }).addTo(map);
+                    }
+                }
                 
                 if (markers[trackerID]) {
                     markers[trackerID].setLatLng([point.lat, point.lon]);
@@ -1750,13 +1888,87 @@
         }
 
         function toggleTraces() {
+            // If heatmap is active, don't allow traces
+            if (showHeatmap) {
+                showNotification('Disable Speed Heatmap first to enable traces', 'error');
+                return;
+            }
+            
             showTraces = !showTraces;
             const toggle = document.getElementById('traceToggle');
             toggle.classList.toggle('active');
             
+            // If turning off traces, also turn off only tails
+            if (!showTraces && onlyShowTails) {
+                onlyShowTails = false;
+                document.getElementById('onlyTailsToggle').classList.remove('active');
+                // Disable tail control when only tails is turned off
+                document.getElementById('tailControl').classList.remove('active');
+            }
+            
+            // Clear tail polylines when traces are disabled
+            if (!showTraces) {
+                Object.values(tailPolylines).forEach(polyline => {
+                    map.removeLayer(polyline);
+                });
+                tailPolylines = {};
+            }
+            
+            // Update full trace polylines - hide them when only tails is active
             Object.values(polylines).forEach(polyline => {
-                polyline.setStyle({ opacity: showTraces ? 0.6 : 0 });
+                polyline.setStyle({ opacity: (showTraces && !onlyShowTails) ? 0.6 : 0 });
             });
+            
+            // Update boat positions to refresh tails
+            updateBoatPositions(currentTime);
+        }
+
+        function toggleOnlyTails() {
+            // If heatmap is active, don't allow only tails
+            if (showHeatmap) {
+                showNotification('Disable Speed Heatmap first to enable tails', 'error');
+                return;
+            }
+            
+            onlyShowTails = !onlyShowTails;
+            const toggle = document.getElementById('onlyTailsToggle');
+            toggle.classList.toggle('active');
+            
+            // Save to localStorage
+            localStorage.setItem('onlyShowTails', onlyShowTails.toString());
+            
+            // Control tail control based on only tails state
+            const tailControl = document.getElementById('tailControl');
+            if (onlyShowTails) {
+                // When only tails is enabled, ensure traces are enabled
+                if (!showTraces) {
+                    toggleTraces();
+                }
+                tailControl.classList.add('active');
+            } else {
+                tailControl.classList.remove('active');
+            }
+            
+            // Update trace visibility
+            Object.values(polylines).forEach(polyline => {
+                polyline.setStyle({ opacity: onlyShowTails ? 0 : (showTraces ? 0.6 : 0) });
+            });
+            
+            // Update boat positions to refresh tails
+            updateBoatPositions(currentTime);
+        }
+
+        function updateTailDuration(value) {
+            tailDuration = parseInt(value);
+            document.getElementById('tailValue').textContent = `${tailDuration}s`;
+            
+            // Save to localStorage
+            localStorage.setItem('tailDuration', tailDuration.toString());
+            
+            // Update tail polylines if traces are enabled
+            if (showTraces) {
+                updateBoatPositions(currentTime);
+            }
         }
 
         function toggleHeatmap() {
@@ -1764,7 +1976,17 @@
             const toggle = document.getElementById('heatmapToggle');
             toggle.classList.toggle('active');
             
+            // When heatmap is enabled, it becomes the master display mode
             if (showHeatmap) {
+                // Disable traces and tails when heatmap is active
+                if (showTraces) {
+                    toggleTraces();
+                }
+                if (onlyShowTails) {
+                    toggleOnlyTails();
+                }
+                
+                // Create heatmap
                 Object.keys(traces).forEach((trackerID, idx) => {
                     const points = traces[trackerID];
                     const speeds = points.map(p => p.speed);
@@ -1775,7 +1997,8 @@
                     for (let i = 0; i < points.length - 1; i++) {
                         const speed = points[i].speed;
                         const normalized = (speed - minSpeed) / (maxSpeed - minSpeed);
-                        const color = `hsl(${normalized * 120}, 100%, 50%)`;
+                        // Inverted colors: red (0) for fastest, green (120) for slowest
+                        const color = `hsl(${(1 - normalized) * 120}, 100%, 50%)`;
                         
                         L.polyline(
                             [[points[i].lat, points[i].lon], [points[i + 1].lat, points[i + 1].lon]],
@@ -1784,6 +2007,7 @@
                     }
                 });
             } else {
+                // Reinitialize map to restore normal view
                 initializeMap();
             }
         }
@@ -1992,6 +2216,7 @@
         });
 
         // Initialize
+        loadSavedSettings();
         initializeEventSelector();
     </script>
 </body>
