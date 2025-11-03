@@ -745,6 +745,77 @@
             min-width: 60px;
             text-align: center;
         }
+
+        .advanced-stats-content {
+            background: rgba(15, 20, 40, 0.98);
+            border-radius: 20px;
+            padding: 32px;
+            min-width: 800px;
+            max-width: 95vw;
+            max-height: 90vh;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+            animation: modalSlideIn 0.3s ease-out;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-top: 24px;
+        }
+
+        .stats-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stats-card h4 {
+            color: #64B5F6;
+            margin-bottom: 16px;
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 14px;
+        }
+
+        .stats-row:last-child {
+            border-bottom: none;
+        }
+
+        .stats-label {
+            color: #90CAF9;
+        }
+
+        .stats-value {
+            color: white;
+            font-weight: 600;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 16px;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #90CAF9;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -823,6 +894,23 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-modal" id="advancedStatsModal">
+        <div class="advanced-stats-content">
+            <div class="settings-header">
+                <div class="settings-title">
+                    📊 Advanced Race Statistics
+                </div>
+                <button class="close-settings" onclick="closeAdvancedStats()">
+                    ✕
+                </button>
+            </div>
+            
+            <div id="advancedStatsContent">
+                <!-- Stats will be populated here -->
             </div>
         </div>
     </div>
@@ -1797,6 +1885,11 @@
                     <span class="boat-detail-label">Total Distance</span>
                     <span class="boat-detail-value">${(totalDistance / 1000).toFixed(1)} km</span>
                 </div>
+                <div style="margin-top: 16px; text-align: center;">
+                    <button class="btn" onclick="openAdvancedStats(${trackerID})" style="font-size: 12px; padding: 8px 16px;">
+                        📊 Advanced Stats
+                    </button>
+                </div>
             `;
             
             document.getElementById('boatDetailsContent').innerHTML = detailsHTML;
@@ -2020,6 +2113,267 @@
             document.getElementById('settingsModal').style.display = 'none';
         }
 
+        function openAdvancedStats(trackerID) {
+            const points = traces[trackerID];
+            if (!points || points.length === 0) return;
+
+            const displayName = markers[trackerID].displayName;
+            
+            // Calculate comprehensive statistics
+            const stats = calculateAdvancedStats(points);
+            
+            const statsHTML = `
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <h2 style="color: #64B5F6; margin-bottom: 8px;">${displayName}</h2>
+                    <p style="color: #90CAF9; font-size: 14px;">Complete Race Performance Analysis</p>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stats-card">
+                        <h4>⚡ Speed Performance</h4>
+                        <div class="stats-row">
+                            <span class="stats-label">Average Speed</span>
+                            <span class="stats-value">${stats.avgSpeed.toFixed(1)} kts</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Max Speed</span>
+                            <span class="stats-value">${stats.maxSpeed.toFixed(1)} kts</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Min Speed</span>
+                            <span class="stats-value">${stats.minSpeed.toFixed(1)} kts</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Speed Std Dev</span>
+                            <span class="stats-value">${stats.speedStdDev.toFixed(1)} kts</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Time > 15 kts</span>
+                            <span class="stats-value">${stats.fastTimePercentage}%</span>
+                        </div>
+                    </div>
+
+                    <div class="stats-card">
+                        <h4>🧭 Navigation & Course</h4>
+                        <div class="stats-row">
+                            <span class="stats-label">Total Distance</span>
+                            <span class="stats-value">${(stats.totalDistance / 1000).toFixed(2)} km</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Straight Line</span>
+                            <span class="stats-value">${(stats.straightLineDistance / 1000).toFixed(2)} km</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Efficiency</span>
+                            <span class="stats-value">${stats.efficiency}%</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Avg Heading</span>
+                            <span class="stats-value">${stats.avgHeading.toFixed(0)}°</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Heading Changes</span>
+                            <span class="stats-value">${stats.headingChanges}</span>
+                        </div>
+                    </div>
+
+                    <div class="stats-card">
+                        <h4>🏁 Race Performance</h4>
+                        <div class="stats-row">
+                            <span class="stats-label">Best Rank</span>
+                            <span class="stats-value">${stats.bestRank}</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Current Rank</span>
+                            <span class="stats-value">${stats.currentRank}</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Avg Rank</span>
+                            <span class="stats-value">${stats.avgRank.toFixed(1)}</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Race Time</span>
+                            <span class="stats-value">${stats.raceDuration}</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Data Points</span>
+                            <span class="stats-value">${stats.dataPoints}</span>
+                        </div>
+                    </div>
+
+                    <div class="stats-card">
+                        <h4>💨 Wind Performance</h4>
+                        <div class="stats-row">
+                            <span class="stats-label">Avg VMG</span>
+                            <span class="stats-value">${stats.avgVMG.toFixed(1)} kts</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Max VMG</span>
+                            <span class="stats-value">${stats.maxVMG.toFixed(1)} kts</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Avg VMC</span>
+                            <span class="stats-value">${stats.avgVMC.toFixed(1)} kts</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Max VMC</span>
+                            <span class="stats-value">${stats.maxVMC.toFixed(1)} kts</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Upwind Time</span>
+                            <span class="stats-value">${stats.upwindPercentage}%</span>
+                        </div>
+                    </div>
+
+                    <div class="stats-card">
+                        <h4>📊 Speed Distribution</h4>
+                        <div class="stats-row">
+                            <span class="stats-label">0-5 kts</span>
+                            <span class="stats-value">${stats.speedRanges['0-5']}%</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">5-10 kts</span>
+                            <span class="stats-value">${stats.speedRanges['5-10']}%</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">10-15 kts</span>
+                            <span class="stats-value">${stats.speedRanges['10-15']}%</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">15-20 kts</span>
+                            <span class="stats-value">${stats.speedRanges['15-20']}%</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">20+ kts</span>
+                            <span class="stats-value">${stats.speedRanges['20+']}%</span>
+                        </div>
+                        <div class="chart-container">
+                            Speed chart visualization would go here
+                        </div>
+                    </div>
+
+                    <div class="stats-card">
+                        <h4>⏱️ Time Analysis</h4>
+                        <div class="stats-row">
+                            <span class="stats-label">Start Time</span>
+                            <span class="stats-value">${stats.startTime}</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">End Time</span>
+                            <span class="stats-value">${stats.endTime}</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Duration</span>
+                            <span class="stats-value">${stats.totalDuration}</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Avg Interval</span>
+                            <span class="stats-value">${stats.avgInterval.toFixed(1)}s</span>
+                        </div>
+                        <div class="stats-row">
+                            <span class="stats-label">Data Gaps</span>
+                            <span class="stats-value">${stats.dataGaps}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('advancedStatsContent').innerHTML = statsHTML;
+            document.getElementById('advancedStatsModal').style.display = 'flex';
+        }
+
+        function closeAdvancedStats() {
+            document.getElementById('advancedStatsModal').style.display = 'none';
+        }
+
+        function calculateAdvancedStats(points) {
+            if (!points || points.length === 0) return {};
+
+            // Speed statistics
+            const speeds = points.map(p => p.speed || 0);
+            const avgSpeed = speeds.reduce((a, b) => a + b, 0) / speeds.length;
+            const maxSpeed = Math.max(...speeds);
+            const minSpeed = Math.min(...speeds);
+            const speedStdDev = Math.sqrt(speeds.reduce((sq, n) => sq + Math.pow(n - avgSpeed, 2), 0) / speeds.length);
+            const fastTimePercentage = (speeds.filter(s => s > 15).length / speeds.length * 100).toFixed(1);
+
+            // Distance and navigation
+            let totalDistance = 0;
+            for (let i = 1; i < points.length; i++) {
+                totalDistance += getDistance(points[i - 1], points[i]);
+            }
+            
+            const straightLineDistance = getDistance(points[0], points[points.length - 1]);
+            const efficiency = (straightLineDistance / totalDistance * 100).toFixed(1);
+            
+            // Heading analysis
+            const headings = points.map(p => p.heading || 0);
+            const avgHeading = headings.reduce((a, b) => a + b, 0) / headings.length;
+            let headingChanges = 0;
+            for (let i = 1; i < headings.length; i++) {
+                if (Math.abs(headings[i] - headings[i-1]) > 30) headingChanges++;
+            }
+
+            // Rank analysis
+            const ranks = points.map(p => p.rank || 999).filter(r => r !== 999);
+            const bestRank = ranks.length > 0 ? Math.min(...ranks) : 'N/A';
+            const currentRank = points[points.length - 1].rank || 'N/A';
+            const avgRank = ranks.length > 0 ? ranks.reduce((a, b) => a + b, 0) / ranks.length : 0;
+
+            // VMG/VMC analysis
+            const vmgValues = points.map(p => p.vmg || 0).filter(v => v > 0);
+            const vmcValues = points.map(p => p.vmc || 0).filter(v => v > 0);
+            const avgVMG = vmgValues.length > 0 ? vmgValues.reduce((a, b) => a + b, 0) / vmgValues.length : 0;
+            const maxVMG = vmgValues.length > 0 ? Math.max(...vmgValues) : 0;
+            const avgVMC = vmcValues.length > 0 ? vmcValues.reduce((a, b) => a + b, 0) / vmcValues.length : 0;
+            const maxVMC = vmcValues.length > 0 ? Math.max(...vmcValues) : 0;
+
+            // Wind analysis
+            let upwindTime = 0;
+            points.forEach(p => {
+                if (p.windDirection && p.heading) {
+                    const twa = Math.abs(p.windDirection - p.heading);
+                    if (twa > 90 && twa < 270) upwindTime++;
+                }
+            });
+            const upwindPercentage = ((upwindTime / points.length) * 100).toFixed(1);
+
+            // Speed distribution
+            const speedRanges = {
+                '0-5': (speeds.filter(s => s >= 0 && s < 5).length / speeds.length * 100).toFixed(1),
+                '5-10': (speeds.filter(s => s >= 5 && s < 10).length / speeds.length * 100).toFixed(1),
+                '10-15': (speeds.filter(s => s >= 10 && s < 15).length / speeds.length * 100).toFixed(1),
+                '15-20': (speeds.filter(s => s >= 15 && s < 20).length / speeds.length * 100).toFixed(1),
+                '20+': (speeds.filter(s => s >= 20).length / speeds.length * 100).toFixed(1)
+            };
+
+            // Time analysis
+            const startTime = new Date(points[0].timestamp * 1000).toLocaleTimeString();
+            const endTime = new Date(points[points.length - 1].timestamp * 1000).toLocaleTimeString();
+            const totalDuration = new Date((points[points.length - 1].timestamp - points[0].timestamp) * 1000).toISOString().substr(11, 8);
+            const raceDuration = new Date((maxTime - minTime) * 1000).toISOString().substr(11, 8);
+            
+            let totalInterval = 0;
+            let dataGaps = 0;
+            for (let i = 1; i < points.length; i++) {
+                const interval = points[i].timestamp - points[i-1].timestamp;
+                totalInterval += interval;
+                if (interval > 60) dataGaps++; // Gaps over 1 minute
+            }
+            const avgInterval = totalInterval / (points.length - 1);
+
+            return {
+                avgSpeed, maxSpeed, minSpeed, speedStdDev, fastTimePercentage,
+                totalDistance, straightLineDistance, efficiency,
+                avgHeading, headingChanges,
+                bestRank, currentRank, avgRank,
+                avgVMG, maxVMG, avgVMC, maxVMC,
+                upwindPercentage, speedRanges,
+                startTime, endTime, totalDuration, raceDuration,
+                avgInterval, dataGaps, dataPoints: points.length
+            };
+        }
+
         // Close settings when clicking outside
         document.getElementById('settingsModal').addEventListener('click', function(e) {
             if (e.target === this) {
@@ -2027,10 +2381,21 @@
             }
         });
 
-        // Close settings with Escape key
+        // Close advanced stats when clicking outside
+        document.getElementById('advancedStatsModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeAdvancedStats();
+            }
+        });
+
+        // Close modals with Escape key
         document.addEventListener('keydown', function(e) {
-            if (e.code === 'Escape' && document.getElementById('settingsModal').style.display === 'flex') {
-                closeSettings();
+            if (e.code === 'Escape') {
+                if (document.getElementById('settingsModal').style.display === 'flex') {
+                    closeSettings();
+                } else if (document.getElementById('advancedStatsModal').style.display === 'flex') {
+                    closeAdvancedStats();
+                }
             }
         });
 
