@@ -342,6 +342,10 @@
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
 
+        .stat-row:last-child {
+            border-bottom: none;
+        }
+
         .stat-label {
             color: #90CAF9;
             font-size: 13px;
@@ -503,6 +507,55 @@
         .back-btn:hover {
             background: rgba(255, 255, 255, 0.2);
         }
+
+        .boat-details {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 20px;
+            max-height: 70vh;
+            overflow-y: auto;
+            min-width: 320px;
+            display: none;
+        }
+
+        .boat-details h3 {
+            margin-bottom: 16px;
+            font-size: 18px;
+            color: #64B5F6;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .boat-detail-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 13px;
+        }
+
+        .boat-detail-item:last-child {
+            border-bottom: none;
+        }
+
+        .boat-detail-label {
+            color: #90CAF9;
+            font-weight: 600;
+        }
+
+        .boat-detail-value {
+            color: white;
+            font-weight: 700;
+        }
+
+        .boat-name-large {
+            font-size: 18px;
+            font-weight: 700;
+            color: #64B5F6;
+            margin-bottom: 8px;
+        }
     </style>
 </head>
 <body>
@@ -529,6 +582,11 @@
             <span>Show Traces</span>
         </div>
         <div id="legend-items"></div>
+    </div>
+
+    <div class="overlay-panel boat-details" id="boatDetails" style="display: none;">
+        <h3>🛥️ Boat Details</h3>
+        <div id="boatDetailsContent"></div>
     </div>
 
     <div class="overlay-panel stats-panel" id="statsPanel" style="display: none;">
@@ -572,14 +630,7 @@
                        <option value="200">200x</option>
                    </select>
               </div>
-            <div class="filter-control">
-                <label>View:</label>
-                <select id="viewSelect" onchange="changeView()">
-                    <option value="all">All Boats</option>
-                    <option value="top5">Top 5</option>
-                    <option value="leader">Leader Only</option>
-                </select>
-            </div>
+
         </div>
     </div>
 
@@ -597,6 +648,7 @@
         let showHeatmap = false;
         let selectedEvent = null;
         let selectedRace = null;
+        let selectedBoat = null;
 
         const colors = ['#2196F3', '#F44336', '#4CAF50', '#9C27B0', '#FF9800', '#00BCD4', '#E91E63', '#8BC34A', '#FF5722', '#3F51B5', '#FFC107', '#009688', '#795548', '#607D8B'];
 
@@ -1048,7 +1100,7 @@
                     icon: boatIcon
                 }).addTo(map);
 
-                markers[trackerID].bindPopup(`<b>${displayName}</b><br>Speed: 0 kts<br>Heading: 0°`);
+                markers[trackerID].bindPopup(`<b>${displayName}</b><br>Rank: -<br>Speed: 0 kts`);
 
                 markers[trackerID].isMark = isMark;
                 markers[trackerID].displayName = displayName;
@@ -1058,7 +1110,7 @@
                     const maxSpeed = Math.max(...points.map(p => p.speed)).toFixed(1);
 
                     legendHTML += `
-                        <div class="legend-item" onclick="toggleBoat(${trackerID})">
+                        <div class="legend-item" onclick="showBoatDetailsFromLegend(${trackerID})">
                             <div class="legend-color" style="background: ${color}"></div>
                             <div class="legend-details">
                                 <div class="legend-name">⛵ ${displayName}</div>
@@ -1278,19 +1330,14 @@
 
                     markers[trackerID].bindPopup(
                         `<b>${markers[trackerID].displayName}</b><br>` +
-                        `Speed: ${point.speed.toFixed(1)} kts<br>` +
-                        `Heading: ${point.heading.toFixed(0)}°<br>` +
                         `Rank: ${point.rank || 'N/A'}<br>` +
-                        `Wind State: ${point.windState || 'N/A'}<br>` +
-                        `TWD: ${point.windDirection ? point.windDirection.toFixed(0) : 'N/A'}°<br>` +
-                        `TWA: ${twa !== null ? twa.toFixed(0) : 'N/A'}°<br>` +
-                        `VMC: ${point.vmc ? point.vmc.toFixed(1) : 'N/A'} kts<br>` +
-                        `VMG: ${point.vmg ? point.vmg.toFixed(1) : 'N/A'} kts<br>` +
-                        `<br><b>Personal Stats:</b><br>` +
-                        `Avg Speed: ${avgSpeed} kts<br>` +
-                        `Max Speed: ${maxSpeed} kts<br>` +
-                        `Total Distance: ${(totalDistance / 1000).toFixed(1)} km`
+                        `Speed: ${point.speed.toFixed(1)} kts`
                     );
+                    
+                    // Add click event to show boat details
+                    markers[trackerID].on('click', function() {
+                        showBoatDetails(trackerID, point, avgSpeed, maxSpeed, totalDistance, twa);
+                    });
                 }
             });
             
@@ -1302,6 +1349,34 @@
 
             updateStats();
             updateLegendDisplay();
+            
+            // Update boat details if a boat is selected
+            if (selectedBoat !== null && markers[selectedBoat]) {
+                const points = traces[selectedBoat];
+                let currentPoint = points[0];
+                for (let i = 0; i < points.length - 1; i++) {
+                    if (points[i].timestamp <= currentTime && points[i + 1].timestamp >= currentTime) {
+                        currentPoint = points[i];
+                        break;
+                    } else if (points[i].timestamp <= currentTime) {
+                        currentPoint = points[i];
+                    }
+                }
+                
+                const avgSpeed = (points.reduce((sum, p) => sum + p.speed, 0) / points.length).toFixed(1);
+                const maxSpeed = Math.max(...points.map(p => p.speed)).toFixed(1);
+                let totalDistance = 0;
+                for (let i = 1; i < points.length; i++) {
+                    totalDistance += getDistance(points[i - 1], points[i]);
+                }
+                
+                let twa = (currentPoint.windDirection - currentPoint.heading);
+                if (180 >= currentPoint.heading) {
+                    twa = 360 - twa;
+                }
+                
+                showBoatDetails(selectedBoat, currentPoint, avgSpeed, maxSpeed, totalDistance, twa);
+            }
         }
 
         function animate(timestamp) {
@@ -1358,25 +1433,7 @@
             animationSpeed = parseFloat(document.getElementById('speedSelect').value);
         }
 
-        function changeView() {
-            const view = document.getElementById('viewSelect').value;
-            hiddenBoats.clear();
-            
-            if (view === 'top5' || view === 'leader') {
-                const boatSpeeds = Object.keys(traces).filter(id => !markers[id].isMark).map(id => {
-                    const avgSpeed = traces[id].reduce((sum, p) => sum + p.speed, 0) / traces[id].length;
-                    return { id, avgSpeed };
-                }).sort((a, b) => b.avgSpeed - a.avgSpeed);
-                
-                const hideCount = view === 'leader' ? boatSpeeds.length - 1 : boatSpeeds.length - 5;
-                boatSpeeds.slice(view === 'leader' ? 1 : 5).forEach(boat => {
-                    hiddenBoats.add(boat.id);
-                });
-            }
-            
-            updateBoatPositions(currentTime);
-            updateLegendDisplay();
-        }
+
 
         function toggleBoat(trackerID) {
             if (hiddenBoats.has(trackerID)) {
@@ -1386,7 +1443,100 @@
             }
             updateBoatPositions(currentTime);
             updateLegendDisplay();
-            markers[trackerID].openPopup();
+        }
+
+        function showBoatDetails(trackerID, point, avgSpeed, maxSpeed, totalDistance, twa) {
+            selectedBoat = trackerID;
+            const displayName = markers[trackerID].displayName;
+            
+            const detailsHTML = `
+                <div class="boat-name-large">${displayName}</div>
+                <div style="margin: 12px 0; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.2);">
+                    <div style="font-size: 14px; font-weight: 600; color: #64B5F6; margin-bottom: 8px;">📊 Live Stats</div>
+                </div>
+                <div class="boat-detail-item">
+                    <span class="boat-detail-label">Current Rank</span>
+                    <span class="boat-detail-value">${point.rank || 'N/A'}</span>
+                </div>
+                <div class="boat-detail-item">
+                    <span class="boat-detail-label">Current Speed</span>
+                    <span class="boat-detail-value">${point.speed.toFixed(1)} kts</span>
+                </div>
+                <div class="boat-detail-item">
+                    <span class="boat-detail-label">Heading</span>
+                    <span class="boat-detail-value">${point.heading.toFixed(0)}°</span>
+                </div>
+                <div class="boat-detail-item">
+                    <span class="boat-detail-label">Wind State</span>
+                    <span class="boat-detail-value">${point.windState || 'N/A'}</span>
+                </div>
+                <div class="boat-detail-item">
+                    <span class="boat-detail-label">True Wind Direction</span>
+                    <span class="boat-detail-value">${point.windDirection ? point.windDirection.toFixed(0) : 'N/A'}°</span>
+                </div>
+                <div class="boat-detail-item">
+                    <span class="boat-detail-label">True Wind Angle</span>
+                    <span class="boat-detail-value">${twa !== null ? twa.toFixed(0) : 'N/A'}°</span>
+                </div>
+                <div class="boat-detail-item">
+                    <span class="boat-detail-label">VMC</span>
+                    <span class="boat-detail-value">${point.vmc ? point.vmc.toFixed(1) : 'N/A'} kts</span>
+                </div>
+                <div class="boat-detail-item">
+                    <span class="boat-detail-label">VMG</span>
+                    <span class="boat-detail-value">${point.vmg ? point.vmg.toFixed(1) : 'N/A'} kts</span>
+                </div>
+                <div style="margin: 12px 0; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.2);">
+                    <div style="font-size: 14px; font-weight: 600; color: #64B5F6; margin-bottom: 8px;">🏁 Race Stats</div>
+                </div>
+                <div class="boat-detail-item">
+                    <span class="boat-detail-label">Average Speed</span>
+                    <span class="boat-detail-value">${avgSpeed} kts</span>
+                </div>
+                <div class="boat-detail-item">
+                    <span class="boat-detail-label">Max Speed</span>
+                    <span class="boat-detail-value">${maxSpeed} kts</span>
+                </div>
+                <div class="boat-detail-item">
+                    <span class="boat-detail-label">Total Distance</span>
+                    <span class="boat-detail-value">${(totalDistance / 1000).toFixed(1)} km</span>
+                </div>
+            `;
+            
+            document.getElementById('boatDetailsContent').innerHTML = detailsHTML;
+            document.getElementById('boatDetails').style.display = 'block';
+        }
+
+        function showBoatDetailsFromLegend(trackerID) {
+            const points = traces[trackerID];
+            let currentPoint = points[0];
+            for (let i = 0; i < points.length - 1; i++) {
+                if (points[i].timestamp <= currentTime && points[i + 1].timestamp >= currentTime) {
+                    currentPoint = points[i];
+                    break;
+                } else if (points[i].timestamp <= currentTime) {
+                    currentPoint = points[i];
+                }
+            }
+            
+            const avgSpeed = (points.reduce((sum, p) => sum + p.speed, 0) / points.length).toFixed(1);
+            const maxSpeed = Math.max(...points.map(p => p.speed)).toFixed(1);
+            let totalDistance = 0;
+            for (let i = 1; i < points.length; i++) {
+                totalDistance += getDistance(points[i - 1], points[i]);
+            }
+            
+            let twa = (currentPoint.windDirection - currentPoint.heading);
+            if (180 >= currentPoint.heading) {
+                twa = 360 - twa;
+            }
+            
+            showBoatDetails(trackerID, currentPoint, avgSpeed, maxSpeed, totalDistance, twa);
+            
+            // Also open the popup on the boat marker
+            if (markers[trackerID]) {
+                markers[trackerID].openPopup();
+            }
         }
 
         function updateLegendDisplay() {
@@ -1424,7 +1574,7 @@
                 const avgSpeed = (traces[boat.id].reduce((sum, p) => sum + p.speed, 0) / traces[boat.id].length).toFixed(1);
                 const maxSpeed = Math.max(...traces[boat.id].map(p => p.speed)).toFixed(1);
                 legendHTML += `
-                    <div class="legend-item" onclick="toggleBoat(${boat.id})">
+                    <div class="legend-item" onclick="showBoatDetailsFromLegend(${boat.id})">
                         <div class="legend-rank">${rankDisplay}</div>
                         <div class="legend-color" style="background: ${color}"></div>
                         <div class="legend-details">
@@ -1643,6 +1793,18 @@
                     speedSelect.selectedIndex++;
                     changeSpeed();
                 }
+            } else if (e.code === 'Escape') {
+                // Hide boat details panel
+                document.getElementById('boatDetails').style.display = 'none';
+                selectedBoat = null;
+            }
+        });
+
+        // Hide boat details when clicking on map
+        map.on('click', function(e) {
+            if (e.originalEvent.target === map._container || e.originalEvent.target.classList.contains('leaflet-tile')) {
+                document.getElementById('boatDetails').style.display = 'none';
+                selectedBoat = null;
             }
         });
 
