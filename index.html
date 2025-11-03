@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPS Race Tracker Pro</title>
+    <title>Metasail-Tracker-Analyser</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.css" />
     <style>
         * {
@@ -928,7 +928,8 @@
                 const timestamp = parseInt(fields[1]);
                 const lon = parseFloat(fields[2]);
                 const lat = parseFloat(fields[3]);
-                const heading = parseFloat(fields[6]) || 0;
+                let heading = parseFloat(fields[6]) || 0;
+                heading -= 90;
                 const speedStr = fields[7];
                 const speed = parseFloat(speedStr.replace(' kn', '')) || 0;
                 const rank = parseInt(fields[8]) || 0;
@@ -1242,7 +1243,7 @@
                         boatIcon = L.divIcon({
                             className: 'boat-icon',
                             html: `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
-                                    <g transform="translate(16,16) rotate(${point.heading-90})">
+                                    <g transform="translate(16,16) rotate(${point.heading})">
                                         <path d="M0,-14 L-5,10 L0,7 L5,10 Z" fill="${color}" stroke="white" stroke-width="2.5"/>
                                         <circle cx="0" cy="0" r="2" fill="white"/>
                                     </g>
@@ -1262,9 +1263,17 @@
                         totalDistance += getDistance(allPoints[i - 1], allPoints[i]);
                     }
                     
-                    const twa = point.windDirection ? Math.abs((((point.heading - point.windDirection) % 180))) : null;
-                     // TODO fix 2nd way for twa
-                     // const twa = point.windDirection ? Math.abs((((point.heading - point.windDirection -180) % 360))) : null;
+                    // 1st way (downwind angles < 90 and upwind angles < 90)
+                    // const twa = point.windDirection ? Math.abs((((point.heading - point.windDirection) % 180))) : null;
+
+                     // 2nd way (90 < downwind angles and upwind angles < 90)
+
+                    // const twa = point.windDirection ? Math.abs((((point.windDirection - point.heading) % 360))) : null;
+                    let twa = (point.windDirection - point.heading) ;
+                    if (180 >= point.heading){
+                        twa = 360 - twa;
+                    }
+
                     markers[trackerID].bindPopup(
                         `<b>${markers[trackerID].displayName}</b><br>` +
                         `Speed: ${point.speed.toFixed(1)} kts<br>` +
@@ -1614,7 +1623,24 @@
             } else if (e.code === 'ArrowRight') {
                 skipForward();
             } else if (e.code === 'KeyR') {
+                const speedSelect = document.getElementById('speedSelect');
+                speedSelect.selectedIndex = 3; // 1x speed
+                changeSpeed();
                 restart();
+            } else if (e.code === 'KeyS') {
+                e.preventDefault();
+                const speedSelect = document.getElementById('speedSelect');
+                if (speedSelect.selectedIndex > 0) {
+                    speedSelect.selectedIndex--;
+                    changeSpeed();
+                }
+            } else if (e.code === 'KeyD') {
+                e.preventDefault();
+                const speedSelect = document.getElementById('speedSelect');
+                if (speedSelect.selectedIndex < speedSelect.options.length - 1) {
+                    speedSelect.selectedIndex++;
+                    changeSpeed();
+                }
             }
         });
 
