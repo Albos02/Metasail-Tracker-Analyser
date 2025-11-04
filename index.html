@@ -210,6 +210,12 @@
             background: linear-gradient(135deg, #388E3C, #4CAF50);
         }
 
+        #playBtn {
+            width: 60px;
+            justify-content: center;
+            gap: 0;
+        }
+
         .btn-group {
             display: flex;
             gap: 8px;
@@ -931,10 +937,9 @@
             <div class="time-markers" id="timeMarkers"></div>
         </div>
         <div class="control-buttons">
-            <button class="btn success" id="playBtn" onclick="togglePlay()">▶ Play</button>
-            <button class="btn" onclick="restart()">⟲ Restart</button>
-            <button class="btn" onclick="skipBackward()">⏪ -10s</button>
-            <button class="btn" onclick="skipForward()">⏩ +10s</button>
+             <button class="btn success" id="playBtn" onclick="togglePlay()">▶</button>
+             <button class="btn" onclick="skipBackward()">&lt;&lt; &nbsp; -10s</button>
+            <button class="btn" onclick="skipForward()">&gt;&gt; &nbsp; +10s</button>
               <div class="speed-control">
                   <label>Speed:</label>
                    <select id="speedSelect" onchange="changeSpeed()">
@@ -1785,12 +1790,16 @@
             const btn = document.getElementById('playBtn');
             
             if (isPlaying) {
-                btn.innerHTML = '⏸ Pause';
+                // btn.innerHTML = '⏸';
+                btn.innerHTML = `
+                    <span style="transform: translate(0.2em) ScaleX(1.5);">┃</span>
+                    <span style="transform: translate(-0.2em) ScaleX(1.5);">┃</span>
+                `
                 btn.className = 'btn danger';
                 lastUpdateTime = 0;
                 animationFrame = requestAnimationFrame(animate);
             } else {
-                btn.innerHTML = '▶ Play';
+                btn.innerHTML = '▶';
                 btn.className = 'btn success';
                 if (animationFrame) {
                     cancelAnimationFrame(animationFrame);
