@@ -177,10 +177,16 @@ class HTMLParser:
         """Generate a summary of races by date and category."""
         summary = {}
         for date, races in self.event_data.get('races', {}).items():
+            categories = []
+            for race in races:
+                try:
+                    categories.append(race['category'])
+                except KeyError:
+                    pass
             summary[date] = {
                 'total_races': len(races),
-                'categories': list(set(race['category'] for race in races)),
-                'race_titles': [race['title'] for race in races]
+                'categories': list(set(categories)),
+                'race_titles': [race.get('title', '') for race in races]
             }
         return summary
 
@@ -329,8 +335,14 @@ if __name__ == "__main__":
             print(f"Ranking Link: {race['ranking_link']}")
             print(f"Export ID: {race['export_id']}")
             print(f"Start Time: {race['start_time']}")
-            print(f"Category: {race['category']}")
-            print(f"Order: {race['order']}")
+            try:
+                print(f"Category: {race['category']}")
+            except KeyError:
+                print("Category: N/A")
+            try:
+                print(f"Order: {race['order']}")
+            except KeyError:
+                print("Order: N/A")
             print()
 
             session_id = session_id_extractor.get_id(race['export_id'], race['race_link'])
@@ -348,8 +360,8 @@ if __name__ == "__main__":
                 'ranking_link': race['ranking_link'],
                 'export_id': race['export_id'],
                 'start_time': race['start_time'],
-                'category': race['category'],
-                'order': race['order'],
+                'category': race.get('category', ''),
+                'order': race.get('order', ''),
                 'session_id': session_id,
                 'event_name': data['event_name'],
                 'event_location': data['location'],
