@@ -300,7 +300,8 @@ class ZipExtractor:
             os.remove(os.path.join(self.event_path, zip_file))
 
 if __name__ == "__main__":
-    url = sys.argv[1]
+    event_id = sys.argv[1]
+    url = 'https://www.metasail.com/live/' + event_id
     directory = os.getcwd()
 
     html_finder = GetHTMLFile(url)
