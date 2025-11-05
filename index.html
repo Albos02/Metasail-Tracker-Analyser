@@ -978,6 +978,10 @@
         let tailDuration = 30; // seconds
         let tailPolylines = {};
         let onlyShowTails = false;
+        let boatMarkSequences = {}; // Tracks which marks each boat has passed
+        let canonicalRaceCourse = []; // The determined race course sequence
+        let markPositions = {}; // Positions of mark boats
+        let MARK_PASSAGE_THRESHOLD = 100; // meters
 
         // Load saved settings from localStorage
         function loadSavedSettings() {
@@ -999,6 +1003,168 @@
         }
 
         const colors = ['#2196F3', '#F44336', '#4CAF50', '#9C27B0', '#FF9800', '#00BCD4', '#E91E63', '#8BC34A', '#FF5722', '#3F51B5', '#FFC107', '#009688', '#795548', '#607D8B'];
+
+        // Helper function to calculate distance between two points in meters
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371000; // Earth's radius in meters
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        // Identify mark boats and their positions
+        function identifyMarksAndPositions() {
+            markPositions = {};
+
+            Object.keys(traces).forEach(trackerID => {
+                const fullTracker = 'A' + String(trackerID).padStart(4, '0');
+                let isMark = false;
+
+                // Check if this boat is a mark based on name or raceMarks
+                if (boatNames[fullTracker]) {
+                    const name = boatNames[fullTracker].toUpperCase();
+                    if (name.includes('MARK') || name.includes('FINISH') || name.includes('RACE COMM') || name.includes('PIN')) {
+                        isMark = true;
+                    }
+                }
+
+                if (raceMarks[fullTracker]) {
+                    isMark = true;
+                }
+
+                // If it's a mark, store its average position
+                if (isMark && traces[trackerID] && traces[trackerID].length > 0) {
+                    const points = traces[trackerID];
+                    const avgLat = points.reduce((sum, p) => sum + p.lat, 0) / points.length;
+                    const avgLon = points.reduce((sum, p) => sum + p.lon, 0) / points.length;
+                    markPositions[trackerID] = [avgLat, avgLon];
+                }
+            });
+
+            console.log('Identified mark positions:', markPositions);
+        }
+
+        // Track which marks each boat has passed
+        function trackMarkPassages() {
+            boatMarkSequences = {};
+
+            Object.keys(traces).forEach(trackerID => {
+                if (!traces[trackerID]) return;
+
+                boatMarkSequences[trackerID] = [];
+                const points = traces[trackerID];
+
+                // For each mark, find if the boat ever gets close to it
+                Object.keys(markPositions).forEach(markID => {
+                    const markPos = markPositions[markID];
+                    let minDistance = Infinity;
+
+                    // Find minimum distance to this mark
+                    points.forEach(point => {
+                        const distance = calculateDistance(point.lat, point.lon, markPos[0], markPos[1]);
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                        }
+                    });
+
+                    // If boat got within threshold, count as passed
+                    if (minDistance <= MARK_PASSAGE_THRESHOLD) {
+                        boatMarkSequences[trackerID].push(markID.toString());
+                    }
+                });
+
+                // Sort the sequence by the order marks appear in canonical course
+                if (canonicalRaceCourse.length > 0) {
+                    boatMarkSequences[trackerID].sort((a, b) => {
+                        const indexA = canonicalRaceCourse.indexOf(a);
+                        const indexB = canonicalRaceCourse.indexOf(b);
+                        return indexA - indexB;
+                    });
+                }
+            });
+
+            console.log('Tracked mark passages:', boatMarkSequences);
+        }
+
+        // Determine the canonical race course
+        function determineRaceCourse() {
+            // Define course based on typical mark order
+            // This could be made more sophisticated by analyzing raceMarks connections
+            const possibleMarks = Object.keys(markPositions);
+
+            // Order marks: RACE COMM first, then MARKs by number, then FINISH
+            const orderedMarks = possibleMarks.sort((a, b) => {
+                const nameA = (boatNames['A' + String(a).padStart(4, '0')] || '').toUpperCase();
+                const nameB = (boatNames['A' + String(b).padStart(4, '0')] || '').toUpperCase();
+
+                // Priority: RACE COMM < MARK < FINISH
+                const getPriority = (name) => {
+                    if (name.includes('RACE COMM')) return 0;
+                    if (name.includes('MARK')) return 1;
+                    if (name.includes('FINISH')) return 2;
+                    return 3;
+                };
+
+                const priorityA = getPriority(nameA);
+                const priorityB = getPriority(nameB);
+
+                if (priorityA !== priorityB) return priorityA - priorityB;
+
+                // Within same type, sort by number
+                const numA = parseInt(nameA.match(/\d+/)) || 0;
+                const numB = parseInt(nameB.match(/\d+/)) || 0;
+                if (numA && numB) return numA - numB;
+
+                return nameA.localeCompare(nameB);
+            });
+
+            console.log('Determined race course:', orderedMarks);
+            console.log('Canonical race course set to:', orderedMarks);
+            return orderedMarks;
+        }
+
+        // Get current leg for a boat
+        function getCurrentLeg(trackerID) {
+            if (canonicalRaceCourse.length === 0) return null;
+
+            // Filter to only include MARK marks for leg calculation (exclude RACE COMM and FINISH)
+            const legMarks = canonicalRaceCourse.filter(id => {
+                const fullTracker = 'A' + String(id).padStart(4, '0');
+                const name = (boatNames[fullTracker] || '').toUpperCase();
+                return name.includes('MARK');
+            });
+
+            if (legMarks.length === 0) return null;
+
+            const boatSequence = boatMarkSequences[trackerID] || [];
+            let lastPassedIndex = -1;
+
+            // Find the last mark this boat has passed that's in the leg marks
+            for (let i = boatSequence.length - 1; i >= 0; i--) {
+                const markIndex = legMarks.indexOf(boatSequence[i]);
+                if (markIndex !== -1) {
+                    lastPassedIndex = markIndex;
+                    break;
+                }
+            }
+
+            const totalLegs = legMarks.length + 1; // Start + legs between marks + finish
+
+            if (lastPassedIndex === -1) {
+                // Boat hasn't passed any marks yet - on start leg
+                return { current: 1, total: totalLegs };
+            } else if (lastPassedIndex === legMarks.length - 1) {
+                // Boat has passed the last mark - on finish leg
+                return { current: totalLegs, total: totalLegs };
+            } else {
+                // Boat is between marks - on leg after last passed mark
+                return { current: lastPassedIndex + 2, total: totalLegs };
+            }
+        }
 
         // Initialize map
         map = L.map('map').setView([46.8182, 8.2275], 8);
@@ -1234,11 +1400,11 @@
                 console.log('GPS data parsed successfully');
                 
                 // Update UI
-                document.getElementById('eventSelector').style.display = 'none';
-                document.getElementById('legend').style.display = 'block';
-                document.getElementById('statsPanel').style.display = 'block';
-                document.getElementById('timelineControls').style.display = 'block';
-                document.getElementById('raceInfo').textContent = `${raceName} - ${event.name}`;
+                 document.getElementById('eventSelector').style.display = 'none';
+                 document.getElementById('legend').style.display = 'block';
+                 document.getElementById('statsPanel').style.display = 'block';
+                 document.getElementById('timelineControls').style.display = 'block';
+                 document.getElementById('raceInfo').textContent = `${raceName} - ${event.name} (Course: ${canonicalRaceCourse.join(' → ')})`;
                 
                 // Reset speed to 1x
                 const speedSelect = document.getElementById('speedSelect');
@@ -1351,19 +1517,21 @@
                     traces[trackerID] = [];
                 }
 
-                traces[trackerID].push({
-                    timestamp: timestamp,
-                    lat: lat,
-                    lon: lon,
-                    heading: heading,
-                    speed: speed,
-                    rank: rank,
-                    windState: windState,
-                    windDirection: windDirection,
-                    applyWind: applyWind,
-                    vmc: vmc,
-                    vmg: vmg
-                });
+                 traces[trackerID].push({
+                     timestamp: timestamp,
+                     lat: lat,
+                     lon: lon,
+                     heading: heading,
+                     speed: speed,
+                     rank: rank,
+                     windState: windState,
+                     windDirection: windDirection,
+                     applyWind: applyWind,
+                     vmc: vmc,
+                     vmg: vmg
+                 });
+
+                 // Mark passage tracking will be done after all data is loaded
             });
             
             Object.keys(traces).forEach(id => {
@@ -1373,9 +1541,18 @@
             const allTimestamps = Object.values(traces).flat().map(p => p.timestamp);
             minTime = Math.min(...allTimestamps);
             maxTime = Math.max(...allTimestamps);
-            currentTime = minTime;
-            
-            initializeMap();
+             currentTime = minTime;
+
+             // Identify marks and their positions
+             identifyMarksAndPositions();
+
+             // Track mark passages for all boats
+             trackMarkPassages();
+
+             // Determine the race course
+             canonicalRaceCourse = determineRaceCourse();
+
+             initializeMap();
             updateRaceInfo();
             updateTimeMarkers();
         }
@@ -1717,11 +1894,15 @@
                         }
                     }
 
-                    markers[trackerID].bindPopup(
-                        `<b>${markers[trackerID].displayName}</b><br>` +
-                        `Rank: ${point.rank || 'N/A'}<br>` +
-                        `Speed: ${point.speed.toFixed(1)} kts`
-                    );
+                     const legInfo = getCurrentLeg(trackerID);
+                     const legDisplay = legInfo ? `Leg: ${legInfo.current}/${legInfo.total}` : 'Leg: N/A';
+
+                     markers[trackerID].bindPopup(
+                         `<b>${markers[trackerID].displayName}</b><br>` +
+                         `Rank: ${point.rank || 'N/A'}<br>` +
+                         `Speed: ${point.speed.toFixed(1)} kts<br>` +
+                         `${legDisplay}`
+                     );
                     
                     // Add click event to show boat details
                     markers[trackerID].on('click', function() {
@@ -1875,13 +2056,21 @@
                     <span class="boat-detail-label">VMC</span>
                     <span class="boat-detail-value">${point.vmc && point.vmc !== -999 ? point.vmc.toFixed(1) : 'N/A'} kts</span>
                 </div>
-                <div class="boat-detail-item">
-                    <span class="boat-detail-label">VMG</span>
-                    <span class="boat-detail-value">${point.vmg && point.vmg !== -999 ? point.vmg.toFixed(1) : 'N/A'} kts</span>
-                </div>
-                <div style="margin: 12px 0; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.2);">
-                    <div style="font-size: 14px; font-weight: 600; color: #64B5F6; margin-bottom: 8px;">🏁 Race Stats</div>
-                </div>
+                 <div class="boat-detail-item">
+                     <span class="boat-detail-label">VMG</span>
+                     <span class="boat-detail-value">${point.vmg && point.vmg !== -999 ? point.vmg.toFixed(1) : 'N/A'} kts</span>
+                 </div>
+                 <div class="boat-detail-item">
+                     <span class="boat-detail-label">Current Leg</span>
+                     <span class="boat-detail-value">${(() => {
+                         const legInfo = getCurrentLeg(trackerID);
+                         const sequence = boatMarkSequences[trackerID] || [];
+                         return legInfo ? `${legInfo.current}/${legInfo.total} (passed: ${sequence.join(', ')})` : `N/A (passed: ${sequence.join(', ')})`;
+                     })()}</span>
+                 </div>
+                 <div style="margin: 12px 0; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.2);">
+                     <div style="font-size: 14px; font-weight: 600; color: #64B5F6; margin-bottom: 8px;">🏁 Race Stats</div>
+                 </div>
                 <div class="boat-detail-item">
                     <span class="boat-detail-label">Average Speed</span>
                     <span class="boat-detail-value">${avgSpeed} kts</span>
